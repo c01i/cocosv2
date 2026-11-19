@@ -45,6 +45,7 @@ public:
     virtual bool setContentScaleFactor(float contentScaleFactor);
     virtual void end();
     virtual void swapBuffers(void);
+    void beginSceneFrame(void);
     /**
      * Set opengl view port rectangle with points.
      */

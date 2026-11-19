@@ -42,6 +42,10 @@ The **View → Resolution** menu reads `~/Library/Application Support/TestCpp/re
 
 The JSON file may be at most 1 MiB. TestCpp accepts at most 128 presets and names up to 80 characters. An oversized file is kept intact, and TestCpp uses built-in presets for that launch.
 
-**View → Save Screenshot…** (Shift-Command-S) saves a PNG of the game view without window chrome. Its pixel dimensions equal the current unscaled resolution, even on Retina or when the window is zoomed. A screenshot of a zoomed-out window is resampled, so fine details may be interpolated.
+**View → Save Screenshot…** (Shift-Command-S) saves a PNG of the game view without window chrome. Its pixel dimensions equal the current unscaled resolution, even on Retina or when the window is zoomed. TestCpp renders the scene into a fixed-resolution RGBA8 framebuffer with depth/stencil attachments. Only presentation to the window is scaled; screenshots read the original framebuffer directly, without resampling. At 960×640, 25% zoom still captures all 960×640 rendered pixels. This keeps rendering cost tied to the selected resolution, even in a small window.
 
 TestCpp remembers the last selected resolution, zoom level, and ordinary window position. Restarting restores them. If the saved window position is no longer on a connected display, TestCpp moves the title bar into the visible area of the main display. Fullscreen does not replace the saved ordinary window position.
+
+### Screenshot detail regression check (Debug)
+
+Run the Debug executable from its bundle Resources directory with `--verify-fbo /absolute/output/directory`. This explicit test mode builds a static scene with text, fine lines, a sprite and a nested RenderTexture, pauses animation, and writes four PNGs at 100%, 50%, 25%, then 100% again. It exits nonzero unless all four are 960×640 with identical RGBA pixels, snapshot GL bindings are preserved, and an invalid target size is rejected. Normal launches do not enter this test mode.

@@ -32,6 +32,7 @@ NS_CC_BEGIN
 
 static NSSize backingScale(EAGLView *view)
 {
+    if ([view usesSceneFramebuffer]) return NSMakeSize(1.0f, 1.0f);
     NSRect bounds = [view bounds];
     NSRect backingBounds = [view convertRectToBacking:bounds];
     return NSMakeSize(bounds.size.width ? backingBounds.size.width / bounds.size.width : 1.0f,
@@ -84,6 +85,11 @@ void CCEGLView::swapBuffers()
 	[[EAGLView sharedEGLView] swapBuffers];
 }
 
+void CCEGLView::beginSceneFrame()
+{
+    [[EAGLView sharedEGLView] beginSceneFrame];
+}
+
 void CCEGLView::setIMEKeyboardState(bool bOpen)
 {
     if (bOpen)
@@ -99,7 +105,7 @@ void CCEGLView::setIMEKeyboardState(bool bOpen)
 void CCEGLView::setViewPortInPoints(float x , float y , float w , float h)
 {
     EAGLView *view = [EAGLView sharedEGLView];
-    float frameZoomFactor = [view frameZoomFactor];
+    float frameZoomFactor = [view usesSceneFramebuffer] ? 1.0f : [view frameZoomFactor];
     NSSize scale = backingScale(view);
 
     // OpenGL viewports use backing pixels, while the director uses window points.
@@ -112,7 +118,7 @@ void CCEGLView::setViewPortInPoints(float x , float y , float w , float h)
 void CCEGLView::setScissorInPoints(float x , float y , float w , float h)
 {
     EAGLView *view = [EAGLView sharedEGLView];
-    float frameZoomFactor = [view frameZoomFactor];
+    float frameZoomFactor = [view usesSceneFramebuffer] ? 1.0f : [view frameZoomFactor];
     NSSize scale = backingScale(view);
 
     glScissor((GLint)((x * m_fScaleX + m_obViewPortRect.origin.x) * frameZoomFactor * scale.width),
@@ -124,7 +130,7 @@ void CCEGLView::setScissorInPoints(float x , float y , float w , float h)
 CCRect CCEGLView::getScissorRect()
 {
     EAGLView *view = [EAGLView sharedEGLView];
-    float frameZoomFactor = [view frameZoomFactor];
+    float frameZoomFactor = [view usesSceneFramebuffer] ? 1.0f : [view frameZoomFactor];
     NSSize scale = backingScale(view);
     GLint box[4];
     glGetIntegerv(GL_SCISSOR_BOX, box);

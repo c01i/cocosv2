@@ -193,6 +193,9 @@ static EAGLView *view;
 - (void) dealloc
 {
 	CCLOGINFO(@"cocos2d: deallocing EAGLView %@", self);
+	[self lockOpenGLContext];
+	[self setScenePixelSize:NSZeroSize];
+	[self unlockOpenGLContext];
 	[super dealloc];
 }
 	
@@ -210,6 +213,126 @@ static EAGLView *view;
 
 -(void) swapBuffers
 {
+    if (!sceneFramebuffer_) return;
+    GLint oldRead, oldDraw;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldRead);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldDraw);
+    GLboolean scissor = glIsEnabled(GL_SCISSOR_TEST);
+    glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, sceneFramebuffer_);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    NSRect backing = [self convertRectToBacking:[self bounds]];
+    glBlitFramebuffer(0, 0, (GLint)scenePixelSize_.width, (GLint)scenePixelSize_.height,
+                      0, 0, (GLint)roundf(backing.size.width), (GLint)roundf(backing.size.height),
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    // NSOpenGLContext flushBuffer presents the window's default framebuffer.
+    // The director rebinds the scene target at the start of the next frame.
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)oldRead == sceneFramebuffer_ ? 0 : oldRead);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)oldDraw == sceneFramebuffer_ ? 0 : oldDraw);
+    if (scissor) glEnable(GL_SCISSOR_TEST);
+}
+
+- (BOOL)usesSceneFramebuffer
+{
+    return sceneFramebuffer_ != 0;
+}
+
+- (BOOL)setScenePixelSize:(NSSize)size
+{
+    if (NSEqualSizes(size, scenePixelSize_)) return YES;
+    if (!NSEqualSizes(size, NSZeroSize) &&
+        (!isfinite(size.width) || !isfinite(size.height) ||
+         size.width < 1 || size.height < 1 || size.width > 4096 || size.height > 4096 ||
+         floor(size.width) != size.width || floor(size.height) != size.height)) return NO;
+
+    GLint oldRead, oldDraw, oldRenderbuffer;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldRead);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldDraw);
+    glGetIntegerv(GL_RENDERBUFFER_BINDING, &oldRenderbuffer);
+    GLuint framebuffer = 0, color = 0, depthStencil = 0;
+    if (!NSEqualSizes(size, NSZeroSize)) {
+        glGenFramebuffers(1, &framebuffer);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        glGenRenderbuffers(1, &color);
+        glBindRenderbuffer(GL_RENDERBUFFER, color);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, (GLsizei)size.width, (GLsizei)size.height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, color);
+        glGenRenderbuffers(1, &depthStencil);
+        glBindRenderbuffer(GL_RENDERBUFFER, depthStencil);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, (GLsizei)size.width, (GLsizei)size.height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthStencil);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencil);
+        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (!framebuffer || !color || !depthStencil || status != GL_FRAMEBUFFER_COMPLETE) {
+            NSLog(@"Unable to allocate scene framebuffer %.0fx%.0f (status 0x%x)", size.width, size.height, status);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, oldRead);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, oldDraw);
+            glBindRenderbuffer(GL_RENDERBUFFER, oldRenderbuffer);
+            glDeleteRenderbuffers(1, &depthStencil);
+            glDeleteRenderbuffers(1, &color);
+            glDeleteFramebuffers(1, &framebuffer);
+            return NO;
+        }
+    }
+    // Replace only after complete allocation; existing targets survive failure.
+    if ((GLuint)oldRead == sceneFramebuffer_) oldRead = framebuffer;
+    if ((GLuint)oldDraw == sceneFramebuffer_) oldDraw = framebuffer;
+    if ((GLuint)oldRenderbuffer == sceneColorBuffer_ ||
+        (GLuint)oldRenderbuffer == sceneDepthStencilBuffer_) oldRenderbuffer = 0;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, oldRead);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, oldDraw);
+    glBindRenderbuffer(GL_RENDERBUFFER, oldRenderbuffer);
+    glDeleteRenderbuffers(1, &sceneDepthStencilBuffer_);
+    glDeleteRenderbuffers(1, &sceneColorBuffer_);
+    glDeleteFramebuffers(1, &sceneFramebuffer_);
+    sceneFramebuffer_ = framebuffer;
+    sceneColorBuffer_ = color;
+    sceneDepthStencilBuffer_ = depthStencil;
+    scenePixelSize_ = size;
+    return YES;
+}
+
+- (void)beginSceneFrame
+{
+    if (!sceneFramebuffer_) return;
+    glBindFramebuffer(GL_FRAMEBUFFER, sceneFramebuffer_);
+    cocos2d::CCDirector::sharedDirector()->setViewport();
+}
+
+- (NSBitmapImageRep *)sceneSnapshot
+{
+    if (!sceneFramebuffer_) return nil;
+    NSInteger width = (NSInteger)scenePixelSize_.width, height = (NSInteger)scenePixelSize_.height;
+    NSBitmapImageRep *image = [[[NSBitmapImageRep alloc]
+        initWithBitmapDataPlanes:NULL pixelsWide:width pixelsHigh:height
+        bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+        colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width * 4 bitsPerPixel:32] autorelease];
+    if (!image) return nil;
+    GLint oldRead, oldPack;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldRead);
+    glGetIntegerv(GL_PACK_ALIGNMENT, &oldPack);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, sceneFramebuffer_);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, (GLsizei)width, (GLsizei)height, GL_RGBA, GL_UNSIGNED_BYTE, [image bitmapData]);
+    GLenum error = glGetError();
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, oldRead);
+    glPixelStorei(GL_PACK_ALIGNMENT, oldPack);
+    if (error != GL_NO_ERROR) {
+        NSLog(@"Unable to read scene framebuffer (GL error 0x%x)", error);
+        return nil;
+    }
+    // GL rows start at the bottom; PNG rows start at the top.
+    NSUInteger stride = [image bytesPerRow];
+    NSMutableData *row = [NSMutableData dataWithLength:stride];
+    unsigned char *pixels = [image bitmapData];
+    for (NSInteger y = 0; y < height / 2; ++y) {
+        unsigned char *top = pixels + y * stride;
+        unsigned char *bottom = pixels + (height - 1 - y) * stride;
+        memcpy([row mutableBytes], top, stride);
+        memcpy(top, bottom, stride);
+        memcpy(bottom, [row bytes], stride);
+    }
+    return image;
 }
 
 //

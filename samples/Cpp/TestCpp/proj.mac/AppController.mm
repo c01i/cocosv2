@@ -31,6 +31,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#if COCOS2D_DEBUG > 0
+#include "tests/FboVerification.h"
+static NSDictionary *verificationDefaults = nil;
+#endif
+
 static NSString *const kResolutionWidthKey = @"TestCppResolutionWidth";
 static NSString *const kResolutionHeightKey = @"TestCppResolutionHeight";
 static NSString *const kZoomPercentKey = @"TestCppZoomPercent";
@@ -46,6 +51,9 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 - (void)showScreenshotError:(NSString *)message;
 - (void)restoreWindowPosition;
 - (void)saveWindowPosition;
+#if COCOS2D_DEBUG > 0
+- (void)verifyFramebuffer:(NSString *)directory;
+#endif
 @end
 
 @implementation AppController
@@ -79,7 +87,17 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 			if (zoomPercent == allowedZoom[i]) selectedZoom = zoomPercent / 100.0f;
 		}
 
-		// create the window
+		#if COCOS2D_DEBUG > 0
+        NSArray *arguments = [[NSProcessInfo processInfo] arguments];
+        NSUInteger verifyIndex = [arguments indexOfObject:@"--verify-fbo"];
+        BOOL verify = verifyIndex != NSNotFound && verifyIndex + 1 < [arguments count];
+        if (verify) {
+            verificationDefaults = [[[NSUserDefaults standardUserDefaults]
+                persistentDomainForName:[[NSBundle mainBundle] bundleIdentifier]] copy];
+            selectedWidth = 960; selectedHeight = 640; selectedZoom = 1.0f;
+        }
+#endif
+        // create the window
 		// note that using NSResizableWindowMask causes the window to be a little
 		// smaller and therefore ipad graphics are not loaded
 		NSRect rect = NSMakeRect(200, 200, selectedWidth, selectedHeight);
@@ -112,10 +130,37 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 		[window makeKeyAndOrderFront:self];
 		[window setAcceptsMouseMovedEvents:NO];
 		[[glView openGLContext] makeCurrentContext];
-		[self setupViewMenu];
+		[glView lockOpenGLContext];
+        BOOL sceneReady = [glView setScenePixelSize:NSMakeSize(selectedWidth, selectedHeight)];
+        [glView unlockOpenGLContext];
+        if (!sceneReady) {
+            [self showScreenshotError:@"Unable to create the original-resolution rendering target."];
+            [NSApp terminate:self];
+            return;
+        }
+        [self setupViewMenu];
 
 		cocos2d::CCApplication::sharedApplication()->run();
+#if COCOS2D_DEBUG > 0
+        if (verify) [self performSelector:@selector(verifyFramebuffer:)
+            withObject:[arguments objectAtIndex:verifyIndex + 1] afterDelay:0.5];
+#endif
 	}
+
+#if COCOS2D_DEBUG > 0
+    - (void)verifyFramebuffer:(NSString *)directory
+    {
+        BOOL passed = verifySceneFramebuffer(glView, directory);
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        NSString *domain = [[NSBundle mainBundle] bundleIdentifier];
+        if (verificationDefaults) [defaults setPersistentDomain:verificationDefaults forName:domain];
+        else [defaults removePersistentDomainForName:domain];
+        [defaults synchronize];
+        [verificationDefaults release];
+        verificationDefaults = nil;
+        exit(passed ? 0 : 1);
+    }
+#endif
 
 	- (void)restoreWindowPosition
 	{
@@ -403,81 +448,16 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 		[panel setAllowedFileTypes:[NSArray arrayWithObject:@"png"]];
 		if ([panel runModal] != NSFileHandlingPanelOKButton) return;
 
-		// The frame size belongs to the current GL view. A newly selected preset may
-		// still be waiting for an application restart.
-		cocos2d::CCSize frameSize = cocos2d::CCEGLView::sharedOpenGLView()->getFrameSize();
-		NSInteger outputWidth = (NSInteger)roundf(frameSize.width);
-		NSInteger outputHeight = (NSInteger)roundf(frameSize.height);
-		NSRect backing = [glView convertRectToBacking:[glView bounds]];
-		NSInteger pixelWidth = (NSInteger)roundf(backing.size.width);
-		NSInteger pixelHeight = (NSInteger)roundf(backing.size.height);
-		if (outputWidth <= 0 || outputHeight <= 0 || pixelWidth <= 0 || pixelHeight <= 0 ||
-			pixelWidth > 16384 || pixelHeight > 16384 ||
-			(long long)pixelWidth * pixelHeight > 67108864) {
-			[self showScreenshotError:@"Invalid view size for screenshot."];
-			return;
-		}
-
-		size_t rowBytes = (size_t)pixelWidth * 4;
-		unsigned char *pixels = (unsigned char *)malloc(rowBytes * (size_t)pixelHeight);
-		if (!pixels) {
-			[self showScreenshotError:@"Unable to allocate screenshot buffer."];
-			return;
-		}
-		[glView lockOpenGLContext];
-		GLint previousReadBuffer = GL_BACK;
-		GLint previousPackAlignment = 4;
-		glGetIntegerv(GL_READ_BUFFER, &previousReadBuffer);
-		glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
-		glReadBuffer(GL_FRONT);
-		glPixelStorei(GL_PACK_ALIGNMENT, 1);
-		while (glGetError() != GL_NO_ERROR) {}
-		glReadPixels(0, 0, (GLsizei)pixelWidth, (GLsizei)pixelHeight,
-			GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-		GLenum readError = glGetError();
-		glReadBuffer(previousReadBuffer);
-		glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
-		[glView unlockOpenGLContext];
-		if (readError != GL_NO_ERROR) {
-			free(pixels);
-			[self showScreenshotError:@"Unable to read the OpenGL view."];
-			return;
-		}
-
-		NSBitmapImageRep *source = [[[NSBitmapImageRep alloc]
-			initWithBitmapDataPlanes:NULL pixelsWide:pixelWidth pixelsHigh:pixelHeight
-			bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
-			colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:rowBytes bitsPerPixel:32] autorelease];
-		if (!source) {
-			free(pixels);
-			[self showScreenshotError:@"Unable to create screenshot image."];
-			return;
-		}
-		unsigned char *destination = [source bitmapData];
-		for (NSInteger y = 0; y < pixelHeight; ++y) {
-			memcpy(destination + (size_t)y * [source bytesPerRow],
-				pixels + (size_t)(pixelHeight - 1 - y) * rowBytes, rowBytes);
-		}
-		free(pixels);
-
-		NSBitmapImageRep *output = source;
-		if (pixelWidth != outputWidth || pixelHeight != outputHeight) {
-			output = [[[NSBitmapImageRep alloc]
-				initWithBitmapDataPlanes:NULL pixelsWide:outputWidth pixelsHigh:outputHeight
-				bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
-				colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:outputWidth * 4 bitsPerPixel:32] autorelease];
-			if (!output) {
-				[self showScreenshotError:@"Unable to scale screenshot image."];
-				return;
-			}
-			NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep:output];
-			[NSGraphicsContext saveGraphicsState];
-			[NSGraphicsContext setCurrentContext:context];
-			[context setImageInterpolation:NSImageInterpolationHigh];
-			[source drawInRect:NSMakeRect(0, 0, outputWidth, outputHeight)];
-			[NSGraphicsContext restoreGraphicsState];
-		}
+        // Read the original scene target, never the scaled window framebuffer.
+        [glView lockOpenGLContext];
+        NSBitmapImageRep *output = [[glView sceneSnapshot] retain];
+        [glView unlockOpenGLContext];
+        if (!output) {
+            [self showScreenshotError:@"Unable to read the original-resolution rendering target."];
+            return;
+        }
 		NSData *png = [output representationUsingType:NSPNGFileType properties:[NSDictionary dictionary]];
+        [output release];
 		if (!png || ![png writeToURL:[panel URL] atomically:YES]) {
 			[self showScreenshotError:@"Unable to save the screenshot PNG."];
 		}

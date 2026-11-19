@@ -257,6 +257,9 @@ void CCDirector::drawScene(void)
         m_pScheduler->update(m_fDeltaTime);
     }
 
+#if CC_TARGET_PLATFORM == CC_PLATFORM_MAC
+    if (m_pobOpenGLView) m_pobOpenGLView->beginSceneFrame();
+#endif
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     /* to avoid flickr, nextScene MUST be here: after tick and before draw.

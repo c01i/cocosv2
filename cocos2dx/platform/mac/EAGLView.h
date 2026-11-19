@@ -80,6 +80,10 @@ THE SOFTWARE.
     NSRect          originalWinRect_; // Original size and position
     
     float           frameZoomFactor_;
+    GLuint          sceneFramebuffer_;
+    GLuint          sceneColorBuffer_;
+    GLuint          sceneDepthStencilBuffer_;
+    NSSize          scenePixelSize_;
 }
 
 @property (nonatomic, readwrite, assign) id<MacEventDelegate> eventDelegate;
@@ -104,6 +108,12 @@ THE SOFTWARE.
 - (NSUInteger) depthFormat;
 
 - (void) setFrameZoomFactor:(float)frameZoomFactor;
+
+// Optional fixed-pixel scene target. Call with the OpenGL context locked/current.
+- (BOOL)setScenePixelSize:(NSSize)size;
+- (BOOL)usesSceneFramebuffer;
+- (void)beginSceneFrame;
+- (NSBitmapImageRep *)sceneSnapshot;
 
 // get the view object
 +(id) sharedEGLView;
