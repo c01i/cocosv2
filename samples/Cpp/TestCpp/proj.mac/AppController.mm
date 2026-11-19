@@ -197,14 +197,14 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 
 		// Read one byte past the limit so a large or symlinked file cannot make
 		// startup allocate and parse an unbounded amount of user-controlled data.
-		NSFileHandle *handle = [NSFileHandle fileHandleForReadingAtPath:path];
 		NSError *readError = nil;
 		NSDictionary *attributes = [files attributesOfItemAtPath:path error:&readError];
-		if (![[attributes objectForKey:NSFileType] isEqualToString:NSFileTypeRegular] || !handle) {
-			[handle closeFile];
+		if (![[attributes objectForKey:NSFileType] isEqualToString:NSFileTypeRegular]) {
 			NSLog(@"Unable to read regular resolution config %@: %@", path, readError);
 			return fallback;
 		}
+		NSFileHandle *handle = [NSFileHandle fileHandleForReadingAtPath:path];
+		if (!handle) return fallback;
 		NSData *data = nil;
 		@try {
 			data = [handle readDataOfLength:1024 * 1024 + 1];
