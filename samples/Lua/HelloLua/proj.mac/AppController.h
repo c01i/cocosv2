@@ -33,6 +33,7 @@
         NSArray *launchArguments;
         NSString *launchDirectory;
         BOOL restarting;
+        NSInteger restartParentPID;
 		EAGLView *glView;
 		NSArray *resolutionPresets;
 		NSMenu *resolutionMenu;

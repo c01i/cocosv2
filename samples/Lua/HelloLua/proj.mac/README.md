@@ -55,7 +55,8 @@ errors are logged and the Mac app exits with status 1. Successful startup logs
 
 ## View controls
 
-View → Restart Application (⌘R) starts a new process and exits the current one.
+View → Restart Application (⌘R) starts a new process, brings it to the foreground,
+and exits the current one.
 It reuses the original arguments, including `--workdir` and arguments containing
 spaces, from the original launch directory. Window position, selected resolution
 and zoom use the current state, replacing any older geometry arguments. If the

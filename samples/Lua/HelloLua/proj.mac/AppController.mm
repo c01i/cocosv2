@@ -26,6 +26,7 @@
 #import "AppDelegate.h"
 #import "CCEGLView.h"
 #include "CCFileUtilsMac.h"
+#include <dispatch/dispatch.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
@@ -62,6 +63,9 @@ static NSString *const kWindowOriginYKey = @"HelloLuaWindowOriginY";
 - (void)showScreenshotError:(NSString *)message;
 - (void)restoreWindowPosition;
 - (void)saveWindowPosition;
+- (void)waitForRestartParent;
+- (void)activateRestartedWindow;
+- (void)restartParentDidTerminate:(NSNotification *)notification;
 @end
 
 @implementation AppController
@@ -72,6 +76,13 @@ static NSString *const kWindowOriginYKey = @"HelloLuaWindowOriginY";
 
 	-(void) applicationDidFinishLaunching:(NSNotification *)aNotification
 	{
+        NSString *restartDirectory = [[[NSProcessInfo processInfo] environment]
+            objectForKey:@"COCOS2DX_MAC_LAUNCH_DIRECTORY"];
+        if ([restartDirectory length] &&
+            ![[NSFileManager defaultManager] changeCurrentDirectoryPath:restartDirectory]) {
+            fprintf(stderr, "Unable to restore the original launch directory: %s\n", [restartDirectory UTF8String]);
+            exit(2);
+        }
         NSArray *arguments = [[NSProcessInfo processInfo] arguments];
         launchArguments = [[arguments subarrayWithRange:NSMakeRange(1, [arguments count] - 1)] copy];
         launchDirectory = [[[NSFileManager defaultManager] currentDirectoryPath] copy];
@@ -149,8 +160,6 @@ static NSString *const kWindowOriginYKey = @"HelloLuaWindowOriginY";
 		[self restoreWindowPosition];
 		[window setDelegate:self];
 		[window makeKeyAndOrderFront:self];
-        // Direct executable launches, including Command-R, need explicit foreground activation.
-        [NSApp activateIgnoringOtherApps:YES];
 		[window setAcceptsMouseMovedEvents:NO];
 		[[glView openGLContext] makeCurrentContext];
 		[glView lockOpenGLContext];
@@ -164,12 +173,45 @@ static NSString *const kWindowOriginYKey = @"HelloLuaWindowOriginY";
         [self setupViewMenu];
 
 		cocos2d::CCApplication::sharedApplication()->run();
+        [self waitForRestartParent];
         if (!s_sharedApplication.isSceneReady()) {
             fprintf(stderr, "HelloLua: Lua scene initialization failed.\n");
             exit(1);
         }
 	}
 
+
+
+    - (void)activateRestartedWindow
+    {
+        [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:self
+            name:NSWorkspaceDidTerminateApplicationNotification object:nil];
+        restartParentPID = 0;
+        if (@available(macOS 14.0, *)) [NSApp activate];
+        else [NSApp activateIgnoringOtherApps:YES];
+        [window makeKeyAndOrderFront:self];
+        [window makeFirstResponder:glView];
+    }
+
+    - (void)restartParentDidTerminate:(NSNotification *)notification
+    {
+        NSRunningApplication *application = [[notification userInfo] objectForKey:NSWorkspaceApplicationKey];
+        if (restartParentPID && [application processIdentifier] == restartParentPID)
+            [self activateRestartedWindow];
+    }
+
+    - (void)waitForRestartParent
+    {
+        restartParentPID = [[[[NSProcessInfo processInfo] environment]
+            objectForKey:@"COCOS2DX_MAC_RESTART_PARENT"] integerValue];
+        if (restartParentPID <= 0) return;
+        // Observe before checking termination so an exit between the two cannot be missed.
+        [[[NSWorkspace sharedWorkspace] notificationCenter] addObserver:self
+            selector:@selector(restartParentDidTerminate:)
+            name:NSWorkspaceDidTerminateApplicationNotification object:nil];
+        NSRunningApplication *parent = [NSRunningApplication runningApplicationWithProcessIdentifier:(pid_t)restartParentPID];
+        if (!parent || [parent isTerminated]) [self activateRestartedWindow];
+    }
 
 	- (void)restoreWindowPosition
 	{
@@ -406,6 +448,7 @@ static NSString *const kWindowOriginYKey = @"HelloLuaWindowOriginY";
         [launchArguments release];
         [launchDirectory release];
 		[resolutionPresets release];
+        [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:self];
 		[super dealloc];
 	}
 
@@ -450,21 +493,48 @@ static NSString *const kWindowOriginYKey = @"HelloLuaWindowOriginY";
             [arguments addObject:[[geometry objectForKey:key] stringValue]];
         }
 
-        NSTask *task = [[[NSTask alloc] init] autorelease];
-        [task setExecutableURL:[[NSBundle mainBundle] executableURL]];
-        [task setArguments:arguments];
-        // --workdir may have changed cwd; relative arguments still use the original launch directory.
-        [task setCurrentDirectoryURL:[NSURL fileURLWithPath:launchDirectory isDirectory:YES]];
-        NSError *error = nil;
-        if (![task launchAndReturnError:&error]) {
+        BOOL isDirectory = NO;
+        if (![[NSFileManager defaultManager] fileExistsAtPath:launchDirectory isDirectory:&isDirectory] ||
+            !isDirectory || access([launchDirectory fileSystemRepresentation], X_OK) != 0) {
             NSAlert *alert = [[[NSAlert alloc] init] autorelease];
-            [alert setMessageText:@"Unable to restart the application."];
-            [alert setInformativeText:[error localizedDescription]];
+            [alert setMessageText:@"Unable to restart: the original launch directory is unavailable."];
             [alert runModal];
             restarting = NO;
             return;
         }
-        [NSApp terminate:self];
+
+        // LaunchServices performs the foreground handoff; argv is never passed through a shell.
+        NSWorkspaceOpenConfiguration *configuration = [NSWorkspaceOpenConfiguration configuration];
+        [configuration setCreatesNewApplicationInstance:YES];
+        [configuration setActivates:YES];
+        [configuration setArguments:arguments];
+        NSMutableDictionary *environment = [NSMutableDictionary dictionaryWithDictionary:
+            [[NSProcessInfo processInfo] environment]];
+        // LaunchServices does not inherit cwd. Restore it before the child parses relative arguments.
+        [environment setObject:launchDirectory forKey:@"COCOS2DX_MAC_LAUNCH_DIRECTORY"];
+        [environment setObject:[NSString stringWithFormat:@"%d", getpid()] forKey:@"COCOS2DX_MAC_RESTART_PARENT"];
+        [configuration setEnvironment:environment];
+        [[NSWorkspace sharedWorkspace] openApplicationAtURL:[[NSBundle mainBundle] bundleURL]
+            configuration:configuration completionHandler:^(NSRunningApplication *application, NSError *error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (!application || error) {
+                        NSAlert *alert = [[[NSAlert alloc] init] autorelease];
+                        [alert setMessageText:@"Unable to restart the application."];
+                        [alert setInformativeText:[error localizedDescription] ?: @"The new instance did not launch."];
+                        [alert runModal];
+                        restarting = NO;
+                        return;
+                    }
+                    if (@available(macOS 14.0, *)) {
+                        [NSApp yieldActivationToApplication:application];
+                        [application activateFromApplication:[NSRunningApplication currentApplication]
+                            options:NSApplicationActivateAllWindows];
+                    } else {
+                        [application activateWithOptions:NSApplicationActivateAllWindows | NSApplicationActivateIgnoringOtherApps];
+                    }
+                    [NSApp terminate:self];
+                });
+            }];
     }
 
 	-(IBAction) toggleFullScreen:(id)sender
