@@ -149,6 +149,8 @@ static NSString *const kWindowOriginYKey = @"HelloLuaWindowOriginY";
 		[self restoreWindowPosition];
 		[window setDelegate:self];
 		[window makeKeyAndOrderFront:self];
+        // Direct executable launches, including Command-R, need explicit foreground activation.
+        [NSApp activateIgnoringOtherApps:YES];
 		[window setAcceptsMouseMovedEvents:NO];
 		[[glView openGLContext] makeCurrentContext];
 		[glView lockOpenGLContext];
