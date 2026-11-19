@@ -204,7 +204,10 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 			return fallback;
 		}
 		NSFileHandle *handle = [NSFileHandle fileHandleForReadingAtPath:path];
-		if (!handle) return fallback;
+		if (!handle) {
+			NSLog(@"Unable to open resolution config %@; using defaults", path);
+			return fallback;
+		}
 		NSData *data = nil;
 		@try {
 			data = [handle readDataOfLength:1024 * 1024 + 1];
