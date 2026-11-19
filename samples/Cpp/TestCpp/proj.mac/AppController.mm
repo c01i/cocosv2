@@ -28,6 +28,10 @@
 
 static NSString *const kResolutionWidthKey = @"TestCppResolutionWidth";
 static NSString *const kResolutionHeightKey = @"TestCppResolutionHeight";
+static NSString *const kZoomPercentKey = @"TestCppZoomPercent";
+static NSString *const kHasWindowOriginKey = @"TestCppHasWindowOrigin";
+static NSString *const kWindowOriginXKey = @"TestCppWindowOriginX";
+static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 
 @interface AppController ()
 - (NSString *)resolutionConfigPath;
@@ -35,6 +39,8 @@ static NSString *const kResolutionHeightKey = @"TestCppResolutionHeight";
 - (void)setupViewMenu;
 - (void)updateViewMenu;
 - (void)showScreenshotError:(NSString *)message;
+- (void)restoreWindowPosition;
+- (void)saveWindowPosition;
 @end
 
 @implementation AppController
@@ -61,7 +67,12 @@ static NSString *const kResolutionHeightKey = @"TestCppResolutionHeight";
 			selectedWidth = 480;
 			selectedHeight = 320;
 		}
+		NSInteger zoomPercent = [defaults integerForKey:kZoomPercentKey];
+		int allowedZoom[] = {25, 50, 75, 100, 150, 200};
 		selectedZoom = 1.0f;
+		for (int i = 0; i < 6; ++i) {
+			if (zoomPercent == allowedZoom[i]) selectedZoom = zoomPercent / 100.0f;
+		}
 
 		// create the window
 		// note that using NSResizableWindowMask causes the window to be a little
@@ -90,12 +101,66 @@ static NSString *const kResolutionHeightKey = @"TestCppResolutionHeight";
 		[window becomeFirstResponder];
 		[window setContentView:glView];
 		[window setTitle:@"TestCpp"];
+		if (selectedZoom != 1.0f) [glView setFrameZoomFactor:selectedZoom];
+		[self restoreWindowPosition];
+		[window setDelegate:self];
 		[window makeKeyAndOrderFront:self];
 		[window setAcceptsMouseMovedEvents:NO];
 		[[glView openGLContext] makeCurrentContext];
 		[self setupViewMenu];
 
 		cocos2d::CCApplication::sharedApplication()->run();
+	}
+
+	- (void)restoreWindowPosition
+	{
+		NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+		if (![defaults boolForKey:kHasWindowOriginKey]) return;
+		double x = [defaults doubleForKey:kWindowOriginXKey];
+		double y = [defaults doubleForKey:kWindowOriginYKey];
+		if (!isfinite(x) || !isfinite(y)) return;
+
+		NSRect frame = [window frame];
+		frame.origin = NSMakePoint(x, y);
+		NSScreen *screen = nil;
+		for (NSScreen *candidate in [NSScreen screens]) {
+			if (NSIntersectsRect(frame, [candidate visibleFrame])) {
+				screen = candidate;
+				break;
+			}
+		}
+		if (!screen) screen = [NSScreen mainScreen];
+		if (!screen) return;
+		NSRect visible = [screen visibleFrame];
+		// Keep at least 80 points of title bar horizontally and 30 vertically visible.
+		frame.origin.x = fmax(NSMinX(visible) - NSWidth(frame) + 80,
+			fmin(frame.origin.x, NSMaxX(visible) - 80));
+		frame.origin.y = fmax(NSMinY(visible) - NSHeight(frame) + 30,
+			fmin(frame.origin.y, NSMaxY(visible) - NSHeight(frame)));
+		[window setFrameOrigin:frame.origin];
+	}
+
+	- (void)saveWindowPosition
+	{
+		if (!window || [glView isFullScreen]) return;
+		NSPoint origin = [window frame].origin;
+		NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+		[defaults setDouble:origin.x forKey:kWindowOriginXKey];
+		[defaults setDouble:origin.y forKey:kWindowOriginYKey];
+		[defaults setBool:YES forKey:kHasWindowOriginKey];
+	}
+
+	- (void)windowDidMove:(NSNotification *)notification
+	{
+		if ([notification object] == window) [self saveWindowPosition];
+	}
+
+	- (void)applicationWillTerminate:(NSNotification *)notification
+	{
+		[self saveWindowPosition];
+		NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+		[defaults setInteger:(NSInteger)roundf(selectedZoom * 100) forKey:kZoomPercentKey];
+		[defaults synchronize];
 	}
 
 	- (NSString *)resolutionConfigPath
@@ -268,6 +333,7 @@ static NSString *const kResolutionHeightKey = @"TestCppResolutionHeight";
 		[defaults setInteger:width forKey:kResolutionWidthKey];
 		[defaults setInteger:height forKey:kResolutionHeightKey];
 		[defaults synchronize];
+		[self saveWindowPosition];
 		[self updateViewMenu];
 		NSAlert *alert = [[[NSAlert alloc] init] autorelease];
 		[alert setMessageText:@"Restart TestCpp to apply the selected resolution."];
@@ -278,6 +344,8 @@ static NSString *const kResolutionHeightKey = @"TestCppResolutionHeight";
 	{
 		selectedZoom = [sender tag] / 100.0f;
 		[glView setFrameZoomFactor:selectedZoom];
+		[[NSUserDefaults standardUserDefaults] setInteger:[sender tag] forKey:kZoomPercentKey];
+		[self saveWindowPosition];
 		[self updateViewMenu];
 	}
 

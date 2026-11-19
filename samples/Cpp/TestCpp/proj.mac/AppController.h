@@ -27,7 +27,7 @@
 #import "cocos2d.h"
 #import "EAGLView.h"
 
-@interface AppController : NSObject <NSApplicationDelegate>
+@interface AppController : NSObject <NSApplicationDelegate, NSWindowDelegate>
 	{
 		NSWindow *window;
 		EAGLView *glView;
