@@ -25,6 +25,11 @@
 #import "AppController.h"
 #import "AppDelegate.h"
 #import "CCEGLView.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 static NSString *const kResolutionWidthKey = @"TestCppResolutionWidth";
 static NSString *const kResolutionHeightKey = @"TestCppResolutionHeight";
@@ -195,27 +200,35 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 			}
 		}
 
-		// Read one byte past the limit so a large or symlinked file cannot make
-		// startup allocate and parse an unbounded amount of user-controlled data.
-		NSError *readError = nil;
-		NSDictionary *attributes = [files attributesOfItemAtPath:path error:&readError];
-		if (![[attributes objectForKey:NSFileType] isEqualToString:NSFileTypeRegular]) {
-			NSLog(@"Unable to read regular resolution config %@: %@", path, readError);
+		// Open once without following symlinks or blocking on a FIFO. Validate
+		// that same descriptor, then read no more than one byte past the limit.
+		int fd = open([path fileSystemRepresentation], O_RDONLY | O_NOFOLLOW | O_NONBLOCK);
+		if (fd < 0) {
+			NSLog(@"Unable to open resolution config %@: %s", path, strerror(errno));
 			return fallback;
 		}
-		NSFileHandle *handle = [NSFileHandle fileHandleForReadingAtPath:path];
-		if (!handle) {
-			NSLog(@"Unable to open resolution config %@; using defaults", path);
+		struct stat fileInfo;
+		if (fstat(fd, &fileInfo) != 0 || !S_ISREG(fileInfo.st_mode)) {
+			NSLog(@"Resolution config %@ is not a regular file; using defaults", path);
+			close(fd);
 			return fallback;
 		}
-		NSData *data = nil;
-		@try {
-			data = [handle readDataOfLength:1024 * 1024 + 1];
-		} @catch (NSException *exception) {
-			NSLog(@"Unable to read resolution config %@: %@", path, exception);
+		const NSUInteger readLimit = 1024 * 1024 + 1;
+		NSMutableData *data = [NSMutableData dataWithLength:readLimit];
+		NSUInteger count = 0;
+		while (count < readLimit) {
+			ssize_t amount = read(fd, (char *)[data mutableBytes] + count, readLimit - count);
+			if (amount < 0 && errno == EINTR) continue;
+			if (amount < 0) {
+				NSLog(@"Unable to read resolution config %@: %s", path, strerror(errno));
+				close(fd);
+				return fallback;
+			}
+			if (amount == 0) break;
+			count += (NSUInteger)amount;
 		}
-		[handle closeFile];
-		if (!data) return fallback;
+		close(fd);
+		[data setLength:count];
 		if ([data length] > 1024 * 1024) {
 			NSLog(@"Resolution config %@ exceeds 1 MiB; using defaults", path);
 			return fallback;
