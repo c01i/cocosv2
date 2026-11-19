@@ -7,10 +7,10 @@
     <Filter Include="cocos2dx_support">
       <UniqueIdentifier>{bbe428ed-e8e5-4e3c-80c9-0e586814b884}</UniqueIdentifier>
     </Filter>
-    <Filter Include="luajit">
+    <Filter Include="lua">
       <UniqueIdentifier>{948e219e-763e-41d0-bc8d-6421dba8ad70}</UniqueIdentifier>
     </Filter>
-    <Filter Include="luajit\include">
+    <Filter Include="lua">
       <UniqueIdentifier>{b7025611-420a-4414-b567-f7496eec5f57}</UniqueIdentifier>
     </Filter>
     <Filter Include="xxtea">
@@ -107,17 +107,17 @@
     <ClInclude Include="..\cocos2dx_support\CCLuaValue.h">
       <Filter>cocos2dx_support</Filter>
     </ClInclude>
-    <ClInclude Include="..\luajit\include\lauxlib.h">
-      <Filter>luajit\include</Filter>
+    <ClInclude Include="..\lua\lauxlib.h">
+      <Filter>lua</Filter>
     </ClInclude>
-    <ClInclude Include="..\luajit\include\lua.h">
-      <Filter>luajit\include</Filter>
+    <ClInclude Include="..\lua\lua.h">
+      <Filter>lua</Filter>
     </ClInclude>
-    <ClInclude Include="..\luajit\include\luaconf.h">
-      <Filter>luajit\include</Filter>
+    <ClInclude Include="..\lua\luaconf.h">
+      <Filter>lua</Filter>
     </ClInclude>
-    <ClInclude Include="..\luajit\include\lualib.h">
-      <Filter>luajit\include</Filter>
+    <ClInclude Include="..\lua\lualib.h">
+      <Filter>lua</Filter>
     </ClInclude>
     <ClInclude Include="..\cocos2dx_support\Lua_extensions_CCB.h">
       <Filter>cocos2dx_support</Filter>

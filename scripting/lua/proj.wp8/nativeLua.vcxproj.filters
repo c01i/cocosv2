@@ -8,10 +8,10 @@
     <Filter Include="cocos2dx_support">
       <UniqueIdentifier>{cd720917-6841-4d6f-9004-0517f512ee48}</UniqueIdentifier>
     </Filter>
-    <Filter Include="luajit">
+    <Filter Include="lua">
       <UniqueIdentifier>{61b8ec61-057a-4b42-8618-0e4a223fc656}</UniqueIdentifier>
     </Filter>
-    <Filter Include="luajit\include">
+    <Filter Include="lua">
       <UniqueIdentifier>{1684836c-1858-4a39-a1ae-c7843e25fb12}</UniqueIdentifier>
     </Filter>
     <Filter Include="tolua">
@@ -93,17 +93,17 @@
     <ClInclude Include="..\cocos2dx_support\LuaCocoStudio.h">
       <Filter>cocos2dx_support</Filter>
     </ClInclude>
-    <ClInclude Include="..\luajit\include\lauxlib.h">
-      <Filter>luajit\include</Filter>
+    <ClInclude Include="..\lua\lauxlib.h">
+      <Filter>lua</Filter>
     </ClInclude>
-    <ClInclude Include="..\luajit\include\lua.h">
-      <Filter>luajit\include</Filter>
+    <ClInclude Include="..\lua\lua.h">
+      <Filter>lua</Filter>
     </ClInclude>
-    <ClInclude Include="..\luajit\include\luaconf.h">
-      <Filter>luajit\include</Filter>
+    <ClInclude Include="..\lua\luaconf.h">
+      <Filter>lua</Filter>
     </ClInclude>
-    <ClInclude Include="..\luajit\include\lualib.h">
-      <Filter>luajit\include</Filter>
+    <ClInclude Include="..\lua\lualib.h">
+      <Filter>lua</Filter>
     </ClInclude>
     <ClInclude Include="..\tolua\tolua_event.h">
       <Filter>tolua</Filter>

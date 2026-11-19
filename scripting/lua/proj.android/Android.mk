@@ -26,14 +26,14 @@ LOCAL_SRC_FILES := ../cocos2dx_support/CCLuaBridge.cpp \
           ../cocos2dx_support/tolua_fix.c \
           ../xxtea/xxtea.cpp
           
-LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/../luajit/include \
+LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/../lua \
                            $(LOCAL_PATH)/../tolua \
                            $(LOCAL_PATH)/../cocos2dx_support \
                            $(LOCAL_PATH)/../xxtea
           
           
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/ \
-                    $(LOCAL_PATH)/../luajit/include \
+                    $(LOCAL_PATH)/../lua \
                     $(LOCAL_PATH)/../tolua \
                     $(LOCAL_PATH)/../../../cocos2dx \
                     $(LOCAL_PATH)/../../../cocos2dx/include \
@@ -44,7 +44,7 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)/ \
                     $(LOCAL_PATH)/../../../extensions \
                     $(LOCAL_PATH)/../xxtea
 
-LOCAL_WHOLE_STATIC_LIBRARIES := luajit_static
+LOCAL_WHOLE_STATIC_LIBRARIES := lua515_static
 LOCAL_WHOLE_STATIC_LIBRARIES += cocos_extension_static
 
 LOCAL_CFLAGS += -Wno-psabi
@@ -52,5 +52,5 @@ LOCAL_EXPORT_CFLAGS += -Wno-psabi
 
 include $(BUILD_STATIC_LIBRARY)
 
-$(call import-module,scripting/lua/luajit)
+$(call import-module,scripting/lua/lua)
 $(call import-module,extensions)
