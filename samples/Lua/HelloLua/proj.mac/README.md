@@ -55,6 +55,12 @@ errors are logged and the Mac app exits with status 1. Successful startup logs
 
 ## View controls
 
+View → Restart Application (⌘R) starts a new process and exits the current one.
+It reuses the original arguments, including `--workdir` and arguments containing
+spaces, from the original launch directory. Window position, selected resolution
+and zoom use the current state, replacing any older geometry arguments. If the
+new process cannot be launched, the current app stays open and shows the error.
+
 Choose a resolution in View → Resolution, then restart to apply it. View → Zoom
 changes only window display scale; for example, a 960×640 scene at 25% saves a
 960×640 PNG. View → Save Screenshot suggests

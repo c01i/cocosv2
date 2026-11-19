@@ -30,6 +30,9 @@
 @interface AppController : NSObject <NSApplicationDelegate, NSWindowDelegate>
 	{
 		NSWindow *window;
+        NSArray *launchArguments;
+        NSString *launchDirectory;
+        BOOL restarting;
 		EAGLView *glView;
 		NSArray *resolutionPresets;
 		NSMenu *resolutionMenu;
@@ -42,6 +45,7 @@
 	@property (nonatomic, assign) IBOutlet NSWindow* window;
 	@property (nonatomic, assign) IBOutlet EAGLView* glView;
 
+	-(IBAction)restartApplication:(id)sender;
 	-(IBAction) toggleFullScreen:(id)sender;
 	-(IBAction) exitFullScreen:(id)sender;
 	-(IBAction) selectResolution:(id)sender;

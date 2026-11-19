@@ -81,6 +81,8 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 	-(void) applicationDidFinishLaunching:(NSNotification *)aNotification
 	{
         NSArray *arguments = [[NSProcessInfo processInfo] arguments];
+        launchArguments = [[arguments subarrayWithRange:NSMakeRange(1, [arguments count] - 1)] copy];
+        launchDirectory = [[[NSFileManager defaultManager] currentDirectoryPath] copy];
         NSString *workingDirectory = nil;
         for (NSUInteger i = 1; i < [arguments count]; ++i) {
             if (![[arguments objectAtIndex:i] isEqualToString:@"--workdir"]) continue;
@@ -361,6 +363,12 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 	{
 		NSMenu *viewMenu = [[[NSApp mainMenu] itemWithTitle:@"View"] submenu];
 		if (!viewMenu) return;
+        NSMenuItem *restartItem = [[[NSMenuItem alloc] initWithTitle:@"Restart Application"
+            action:@selector(restartApplication:) keyEquivalent:@"r"] autorelease];
+        [restartItem setKeyEquivalentModifierMask:NSCommandKeyMask];
+        [restartItem setTarget:self];
+        [viewMenu addItem:restartItem];
+        [viewMenu addItem:[NSMenuItem separatorItem]];
 		resolutionMenu = [[[NSMenu alloc] initWithTitle:@"Resolution"] autorelease];
 		NSMenuItem *resolutionItem = [[[NSMenuItem alloc] initWithTitle:@"Resolution"
 			action:nil keyEquivalent:@""] autorelease];
@@ -428,12 +436,69 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
         [window setDelegate:nil];
         [window release];
         [glView release];
+        [launchArguments release];
+        [launchDirectory release];
 		[resolutionPresets release];
 		[super dealloc];
 	}
 
 #pragma mark -
 #pragma mark IB Actions
+
+    -(IBAction)restartApplication:(id)sender
+    {
+        if (restarting) return;
+        restarting = YES;
+        [self saveWindowPosition];
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setInteger:(NSInteger)roundf(selectedZoom * 100) forKey:kZoomPercentKey];
+        [defaults synchronize];
+
+        NSPoint origin = [window frame].origin;
+        // Replace geometry arguments with the current state; preserve all other argv entries.
+        NSDictionary *geometry = [NSDictionary dictionaryWithObjectsAndKeys:
+            [NSNumber numberWithInteger:selectedWidth], kResolutionWidthKey,
+            [NSNumber numberWithInteger:selectedHeight], kResolutionHeightKey,
+            [NSNumber numberWithInteger:(NSInteger)roundf(selectedZoom * 100)], kZoomPercentKey,
+            [NSNumber numberWithBool:YES], kHasWindowOriginKey,
+            [NSNumber numberWithDouble:origin.x], kWindowOriginXKey,
+            [NSNumber numberWithDouble:origin.y], kWindowOriginYKey, nil];
+        NSMutableArray *arguments = [NSMutableArray array];
+        for (NSUInteger i = 0; i < [launchArguments count]; ++i) {
+            NSString *argument = [launchArguments objectAtIndex:i];
+            if ([argument isEqualToString:@"--workdir"] && i + 1 < [launchArguments count]) {
+                [arguments addObject:argument];
+                [arguments addObject:[launchArguments objectAtIndex:++i]];
+                continue;
+            }
+            NSString *key = [argument hasPrefix:@"-"] ? [argument substringFromIndex:1] : @"";
+            if ([geometry objectForKey:key]) {
+                if (i + 1 < [launchArguments count]) ++i;
+                continue;
+            }
+            [arguments addObject:argument];
+        }
+        for (NSString *key in geometry) {
+            [arguments addObject:[@"-" stringByAppendingString:key]];
+            [arguments addObject:[[geometry objectForKey:key] stringValue]];
+        }
+
+        NSTask *task = [[[NSTask alloc] init] autorelease];
+        [task setExecutableURL:[[NSBundle mainBundle] executableURL]];
+        [task setArguments:arguments];
+        // --workdir may have changed cwd; relative arguments still use the original launch directory.
+        [task setCurrentDirectoryURL:[NSURL fileURLWithPath:launchDirectory isDirectory:YES]];
+        NSError *error = nil;
+        if (![task launchAndReturnError:&error]) {
+            NSAlert *alert = [[[NSAlert alloc] init] autorelease];
+            [alert setMessageText:@"Unable to restart the application."];
+            [alert setInformativeText:[error localizedDescription]];
+            [alert runModal];
+            restarting = NO;
+            return;
+        }
+        [NSApp terminate:self];
+    }
 
 	-(IBAction) toggleFullScreen:(id)sender
 	{
