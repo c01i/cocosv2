@@ -11,3 +11,13 @@ ok, value = coroutine.resume(co)
 assert(ok and value == 42)
 assert(string.format("%d", math.floor(42.8)) == "42")
 assert(not pcall(function() error("expected failure") end))
+
+-- Weak table collection must retain its original mode semantics, including NUL.
+local weak = setmetatable({}, {__mode = "kv"})
+do local key, value = {}, {}; weak[key] = value end
+collectgarbage("collect")
+assert(next(weak) == nil)
+local strong = setmetatable({}, {__mode = "\0v"})
+do strong.value = {} end
+collectgarbage("collect")
+assert(strong.value ~= nil)

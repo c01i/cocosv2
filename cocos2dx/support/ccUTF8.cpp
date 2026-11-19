@@ -263,7 +263,8 @@ int getUTF8StringLength(const UTF8* utf8, int max);
 #include <vector>
 #include <string>
 
-typedef std::basic_string<unsigned short> CCWideString;
+// Store UTF-16 code units without requiring non-standard char_traits<unsigned short>.
+typedef std::vector<unsigned short> CCWideString;
 
 namespace llvm {
     
@@ -990,7 +991,7 @@ namespace llvm {
             return true;
         
         const UTF16 *Src = reinterpret_cast<const UTF16 *>(utf16.data());
-        const UTF16 *SrcEnd = reinterpret_cast<const UTF16 *>(utf16.data() + utf16.length());
+        const UTF16 *SrcEnd = reinterpret_cast<const UTF16 *>(utf16.data() + utf16.size());
         
         // Byteswap if necessary.
         std::vector<UTF16> ByteSwapped;
@@ -1007,7 +1008,7 @@ namespace llvm {
             Src++;
         
         // Just allocate enough space up front.  We'll shrink it later.
-        Out.resize(utf16.length() * UNI_MAX_UTF8_BYTES_PER_CODE_POINT + 1);
+        Out.resize(utf16.size() * UNI_MAX_UTF8_BYTES_PER_CODE_POINT + 1);
         UTF8 *Dst = reinterpret_cast<UTF8 *>(&Out[0]);
         UTF8 *DstEnd = Dst + Out.size();
         

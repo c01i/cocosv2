@@ -8,7 +8,7 @@ Official archive: https://www.lua.org/ftp/lua-5.1.5.tar.gz
 
 SHA-256: `2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333`.
 
-The existing repository contains 52 byte-identical upstream source/header files. Two existing differences are retained: `llex.c` fixes the decimal separator to `.` for the old Android NDK, and `lua.c` has its standalone interpreter entry removed. `lua.c`, `luac.c` and `print.c` are not part of the runtime library. Lua's license remains in `lua/lua.h`.
+The existing repository originally contained 52 byte-identical upstream source/header files. Two existing differences are retained: `llex.c` fixes the decimal separator to `.` for the old Android NDK, and `lua.c` has its standalone interpreter entry removed. `lua.c`, `luac.c` and `print.c` are not part of the runtime library. Lua's license remains in `lua/lua.h`. Android integration additionally changes `lgc.c`: weak-table mode strings are scanned within their recorded length, stopping at NUL as before. This avoids Android FORTIFY inferring a zero-sized buffer from Lua 5.1's header-followed-by-string layout; bounds checks remain enabled.
 
 ## Build and check
 

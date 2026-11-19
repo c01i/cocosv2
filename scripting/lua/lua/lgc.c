@@ -164,8 +164,15 @@ static int traversetable (global_State *g, Table *h) {
     markobject(g, h->metatable);
   mode = gfasttm(g, h->metatable, TM_MODE);
   if (mode && ttisstring(mode)) {  /* is there a weak mode? */
-    weakkey = (strchr(svalue(mode), 'k') != NULL);
-    weakvalue = (strchr(svalue(mode), 'v') != NULL);
+    const char *p = svalue(mode);
+    size_t n = tsvalue(mode)->len;
+    /* TString stores bytes after its header. Scan by the recorded length:
+       Android FORTIFY treats strchr's header-relative pointer as size zero. */
+    while (n-- > 0 && *p != '\0') {
+      if (*p == 'k') weakkey = 1;
+      if (*p == 'v') weakvalue = 1;
+      p++;
+    }
     if (weakkey || weakvalue) {  /* is really weak? */
       h->marked &= ~(KEYWEAK | VALUEWEAK);  /* clear bits */
       h->marked |= cast_byte((weakkey << KEYWEAKBIT) |
