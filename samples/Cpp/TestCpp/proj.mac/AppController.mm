@@ -205,12 +205,14 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 			NSLog(@"Unable to read regular resolution config %@: %@", path, readError);
 			return fallback;
 		}
-		NSData *data = [handle readDataUpToLength:1024 * 1024 + 1 error:&readError];
-		[handle closeFile];
-		if (!data || readError) {
-			NSLog(@"Unable to read resolution config %@: %@", path, readError);
-			return fallback;
+		NSData *data = nil;
+		@try {
+			data = [handle readDataOfLength:1024 * 1024 + 1];
+		} @catch (NSException *exception) {
+			NSLog(@"Unable to read resolution config %@: %@", path, exception);
 		}
+		[handle closeFile];
+		if (!data) return fallback;
 		if ([data length] > 1024 * 1024) {
 			NSLog(@"Resolution config %@ exceeds 1 MiB; using defaults", path);
 			return fallback;
