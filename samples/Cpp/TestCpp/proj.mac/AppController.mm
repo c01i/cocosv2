@@ -24,6 +24,7 @@
  
 #import "AppController.h"
 #import "AppDelegate.h"
+#import "CCEGLView.h"
 
 static NSString *const kResolutionWidthKey = @"TestCppResolutionWidth";
 static NSString *const kResolutionHeightKey = @"TestCppResolutionHeight";
@@ -33,6 +34,7 @@ static NSString *const kResolutionHeightKey = @"TestCppResolutionHeight";
 - (NSArray *)loadResolutionPresets;
 - (void)setupViewMenu;
 - (void)updateViewMenu;
+- (void)showScreenshotError:(NSString *)message;
 @end
 
 @implementation AppController
@@ -203,6 +205,12 @@ static NSString *const kResolutionHeightKey = @"TestCppResolutionHeight";
 			[item setTag:scales[i]];
 			[zoomMenu addItem:item];
 		}
+		[viewMenu addItem:[NSMenuItem separatorItem]];
+		NSMenuItem *screenshotItem = [[[NSMenuItem alloc] initWithTitle:@"Save Screenshot…"
+			action:@selector(saveScreenshot:) keyEquivalent:@"s"] autorelease];
+		[screenshotItem setKeyEquivalentModifierMask:NSCommandKeyMask | NSShiftKeyMask];
+		[screenshotItem setTarget:self];
+		[viewMenu addItem:screenshotItem];
 		[self updateViewMenu];
 	}
 
@@ -280,6 +288,100 @@ static NSString *const kResolutionHeightKey = @"TestCppResolutionHeight";
 			[alert setMessageText:@"Unable to open resolutions.json"];
 			[alert runModal];
 		}
+	}
+
+	-(IBAction)saveScreenshot:(id)sender
+	{
+		NSSavePanel *panel = [NSSavePanel savePanel];
+		[panel setNameFieldStringValue:@"TestCpp.png"];
+		[panel setAllowedFileTypes:[NSArray arrayWithObject:@"png"]];
+		if ([panel runModal] != NSFileHandlingPanelOKButton) return;
+
+		// The frame size belongs to the current GL view. A newly selected preset may
+		// still be waiting for an application restart.
+		cocos2d::CCSize frameSize = cocos2d::CCEGLView::sharedOpenGLView()->getFrameSize();
+		NSInteger outputWidth = (NSInteger)roundf(frameSize.width);
+		NSInteger outputHeight = (NSInteger)roundf(frameSize.height);
+		NSRect backing = [glView convertRectToBacking:[glView bounds]];
+		NSInteger pixelWidth = (NSInteger)roundf(backing.size.width);
+		NSInteger pixelHeight = (NSInteger)roundf(backing.size.height);
+		if (outputWidth <= 0 || outputHeight <= 0 || pixelWidth <= 0 || pixelHeight <= 0 ||
+			pixelWidth > 16384 || pixelHeight > 16384 ||
+			(long long)pixelWidth * pixelHeight > 67108864) {
+			[self showScreenshotError:@"Invalid view size for screenshot."];
+			return;
+		}
+
+		size_t rowBytes = (size_t)pixelWidth * 4;
+		unsigned char *pixels = (unsigned char *)malloc(rowBytes * (size_t)pixelHeight);
+		if (!pixels) {
+			[self showScreenshotError:@"Unable to allocate screenshot buffer."];
+			return;
+		}
+		[glView lockOpenGLContext];
+		GLint previousReadBuffer = GL_BACK;
+		GLint previousPackAlignment = 4;
+		glGetIntegerv(GL_READ_BUFFER, &previousReadBuffer);
+		glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+		glReadBuffer(GL_FRONT);
+		glPixelStorei(GL_PACK_ALIGNMENT, 1);
+		while (glGetError() != GL_NO_ERROR) {}
+		glReadPixels(0, 0, (GLsizei)pixelWidth, (GLsizei)pixelHeight,
+			GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+		GLenum readError = glGetError();
+		glReadBuffer(previousReadBuffer);
+		glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+		[glView unlockOpenGLContext];
+		if (readError != GL_NO_ERROR) {
+			free(pixels);
+			[self showScreenshotError:@"Unable to read the OpenGL view."];
+			return;
+		}
+
+		NSBitmapImageRep *source = [[[NSBitmapImageRep alloc]
+			initWithBitmapDataPlanes:NULL pixelsWide:pixelWidth pixelsHigh:pixelHeight
+			bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+			colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:rowBytes bitsPerPixel:32] autorelease];
+		if (!source) {
+			free(pixels);
+			[self showScreenshotError:@"Unable to create screenshot image."];
+			return;
+		}
+		unsigned char *destination = [source bitmapData];
+		for (NSInteger y = 0; y < pixelHeight; ++y) {
+			memcpy(destination + (size_t)y * [source bytesPerRow],
+				pixels + (size_t)(pixelHeight - 1 - y) * rowBytes, rowBytes);
+		}
+		free(pixels);
+
+		NSBitmapImageRep *output = source;
+		if (pixelWidth != outputWidth || pixelHeight != outputHeight) {
+			output = [[[NSBitmapImageRep alloc]
+				initWithBitmapDataPlanes:NULL pixelsWide:outputWidth pixelsHigh:outputHeight
+				bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+				colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:outputWidth * 4 bitsPerPixel:32] autorelease];
+			if (!output) {
+				[self showScreenshotError:@"Unable to scale screenshot image."];
+				return;
+			}
+			NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep:output];
+			[NSGraphicsContext saveGraphicsState];
+			[NSGraphicsContext setCurrentContext:context];
+			[context setImageInterpolation:NSImageInterpolationHigh];
+			[source drawInRect:NSMakeRect(0, 0, outputWidth, outputHeight)];
+			[NSGraphicsContext restoreGraphicsState];
+		}
+		NSData *png = [output representationUsingType:NSPNGFileType properties:[NSDictionary dictionary]];
+		if (!png || ![png writeToURL:[panel URL] atomically:YES]) {
+			[self showScreenshotError:@"Unable to save the screenshot PNG."];
+		}
+	}
+
+	-(void)showScreenshotError:(NSString *)message
+	{
+		NSAlert *alert = [[[NSAlert alloc] init] autorelease];
+		[alert setMessageText:message];
+		[alert runModal];
 	}
 
 @end

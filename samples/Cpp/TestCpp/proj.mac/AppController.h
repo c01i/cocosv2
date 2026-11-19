@@ -47,5 +47,6 @@
 	-(IBAction) selectResolution:(id)sender;
 	-(IBAction) selectZoom:(id)sender;
 	-(IBAction) openResolutionConfig:(id)sender;
+	-(IBAction) saveScreenshot:(id)sender;
 
 @end

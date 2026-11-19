@@ -39,3 +39,5 @@ The **View → Resolution** menu reads `~/Library/Application Support/TestCpp/re
 ```
 
 `width` and `height` are unscaled logical pixels. They must be integers from 320 through 4096, with at most 16,777,216 total pixels. Names must be nonempty; duplicate sizes are ignored. A malformed file is kept intact and TestCpp uses built-in presets for that launch. The menu includes **Open Resolution Config…** to open the file in the default editor. Restart TestCpp after editing the file or selecting a resolution. **View → Zoom** changes only the displayed window size, without changing the logical resolution.
+
+**View → Save Screenshot…** (Shift-Command-S) saves a PNG of the game view without window chrome. Its pixel dimensions equal the current unscaled resolution, even on Retina or when the window is zoomed. A screenshot of a zoomed-out window is resampled, so fine details may be interpolated.
