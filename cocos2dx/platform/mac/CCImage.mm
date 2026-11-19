@@ -430,7 +430,6 @@ static bool _initWithString(const char * pText, cocos2d::CCImage::ETextAlign eAl
 
 		NSUInteger POTWide = (NSUInteger)dimensions.width;
 		NSUInteger POTHigh = (NSUInteger)(MAX(dimensions.height, realDimensions.height));
-		unsigned char*			data;
 		//Alignment
 			
 		CGFloat xPadding = 0;
@@ -450,30 +449,22 @@ static bool _initWithString(const char * pText, cocos2d::CCImage::ETextAlign eAl
 		
 		
 		NSRect textRect = NSMakeRect(xPadding, POTHigh - dimensions.height + yPadding, realDimensions.width, realDimensions.height);
-		//Disable antialias
-		
-		[[NSGraphicsContext currentContext] setShouldAntialias:NO];	
-		
-		NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(POTWide, POTHigh)];
-        
-		[image lockFocus];
-        
-        // patch for mac retina display and lableTTF
-        [[NSAffineTransform transform] set];
-		
-		//[stringWithAttributes drawAtPoint:NSMakePoint(xPadding, offsetY)]; // draw at offset position	
-		[stringWithAttributes drawInRect:textRect];
-		//[stringWithAttributes drawInRect:textRect withAttributes:tokenAttributesDict];
-		NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithFocusedViewRect:NSMakeRect (0.0f, 0.0f, POTWide, POTHigh)];
-		[image unlockFocus];
-		
-		data = (unsigned char*) [bitmap bitmapData];  //Use the same buffer to improve the performance.
-		
-		NSUInteger textureSize = POTWide*POTHigh*4;
-		
-		unsigned char* dataNew = new unsigned char[textureSize];
-		if (dataNew) {
-			memcpy(dataNew, data, textureSize);
+		// A focused-view bitmap can have a different format or row stride.
+		// Draw into a known RGBA8 buffer before uploading it to OpenGL.
+		NSUInteger textureSize = POTWide * POTHigh * 4;
+		unsigned char* dataNew = new unsigned char[textureSize]();
+		CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+		CGContextRef context = CGBitmapContextCreate(dataNew, POTWide, POTHigh, 8,
+			POTWide * 4, colorSpace, kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+		CGColorSpaceRelease(colorSpace);
+		if (context) {
+			[NSGraphicsContext saveGraphicsState];
+			NSGraphicsContext *graphicsContext = [NSGraphicsContext graphicsContextWithCGContext:context flipped:NO];
+			[NSGraphicsContext setCurrentContext:graphicsContext];
+			[graphicsContext setShouldAntialias:NO];
+			[stringWithAttributes drawInRect:textRect];
+			[NSGraphicsContext restoreGraphicsState];
+			CGContextRelease(context);
 			// output params
 			pInfo->width = POTWide;
 			pInfo->height = POTHigh;
@@ -482,9 +473,9 @@ static bool _initWithString(const char * pText, cocos2d::CCImage::ETextAlign eAl
 			pInfo->isPremultipliedAlpha = true;
 			pInfo->bitsPerComponent = 8;
 			bRet = true;
+		} else {
+			delete[] dataNew;
 		}
-		[bitmap release];
-		[image release];
 	} while (0);
     return bRet;
 }

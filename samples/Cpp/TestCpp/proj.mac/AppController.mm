@@ -61,6 +61,7 @@
 		[window setTitle:@"TestCpp"];
 		[window makeKeyAndOrderFront:self];
 		[window setAcceptsMouseMovedEvents:NO];
+		[[glView openGLContext] makeCurrentContext];
 
 		cocos2d::CCApplication::sharedApplication()->run();
 	}

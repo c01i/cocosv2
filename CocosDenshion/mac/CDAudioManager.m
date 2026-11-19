@@ -323,10 +323,7 @@ static BOOL configured = FALSE;
 }    
 
 -(BOOL) isOtherAudioPlaying {
-    UInt32 isPlaying = 0;
-    UInt32 varSize = sizeof(isPlaying);
-    AudioSessionGetProperty (kAudioSessionProperty_OtherAudioIsPlaying, &varSize, &isPlaying);
-    return (isPlaying != 0);
+    return NO;
 }
 
 -(void) setMode:(tAudioManagerMode) mode {
@@ -474,33 +471,7 @@ static BOOL configured = FALSE;
 //ringer mute switch to off (i.e. enables sound) therefore polling is the only reliable way to
 //determine ringer switch state
 -(BOOL) isDeviceMuted {
-
-#if TARGET_IPHONE_SIMULATOR
-    //Calling audio route stuff on the simulator causes problems
     return NO;
-#else    
-    CFStringRef newAudioRoute;
-    UInt32 propertySize = sizeof (CFStringRef);
-    
-    AudioSessionGetProperty (
-                             kAudioSessionProperty_AudioRoute,
-                             &propertySize,
-                             &newAudioRoute
-                             );
-    
-    if (newAudioRoute == NULL) {
-        //Don't expect this to happen but playing safe otherwise a null in the CFStringCompare will cause a crash
-        return YES;
-    } else {    
-        CFComparisonResult newDeviceIsMuted =    CFStringCompare (
-                                                                 newAudioRoute,
-                                                                 (CFStringRef) @"",
-                                                                 0
-                                                                 );
-        
-        return (newDeviceIsMuted == kCFCompareEqualTo);
-    }    
-#endif
 }    
 
 #pragma mark Audio Interrupt Protocol
