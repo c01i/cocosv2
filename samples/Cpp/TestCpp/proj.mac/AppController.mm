@@ -195,8 +195,16 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 			}
 		}
 
-		NSData *data = [NSData dataWithContentsOfFile:path];
+		// Read one byte past the limit so a large or symlinked file cannot make
+		// startup allocate and parse an unbounded amount of user-controlled data.
+		NSFileHandle *handle = [NSFileHandle fileHandleForReadingAtPath:path];
+		NSData *data = [handle readDataOfLength:1024 * 1024 + 1];
+		[handle closeFile];
 		if (!data) return fallback;
+		if ([data length] > 1024 * 1024) {
+			NSLog(@"Resolution config %@ exceeds 1 MiB; using defaults", path);
+			return fallback;
+		}
 		NSError *error = nil;
 		id document = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
 		if (![document isKindOfClass:[NSDictionary class]] ||
@@ -212,7 +220,7 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 			id name = [entry objectForKey:@"name"];
 			id width = [entry objectForKey:@"width"];
 			id height = [entry objectForKey:@"height"];
-			if (![name isKindOfClass:[NSString class]] ||
+			if (![name isKindOfClass:[NSString class]] || [name length] > 80 ||
 				![[name stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] length] ||
 				![width isKindOfClass:[NSNumber class]] || ![height isKindOfClass:[NSNumber class]]) continue;
 			double w = [width doubleValue], h = [height doubleValue];
@@ -223,6 +231,7 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 			[seen addObject:key];
 			[presets addObject:[NSDictionary dictionaryWithObjectsAndKeys:name, @"name",
 				[NSNumber numberWithInt:(int)w], @"width", [NSNumber numberWithInt:(int)h], @"height", nil]];
+			if ([presets count] == 128) break;
 		}
 		if (![presets count]) {
 			NSLog(@"No valid resolutions in %@; using defaults", path);

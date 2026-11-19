@@ -40,6 +40,8 @@ The **View → Resolution** menu reads `~/Library/Application Support/TestCpp/re
 
 `width` and `height` are unscaled logical pixels. They must be integers from 320 through 4096, with at most 16,777,216 total pixels. Names must be nonempty; duplicate sizes are ignored. A malformed file is kept intact and TestCpp uses built-in presets for that launch. The menu includes **Open Resolution Config…** to open the file in the default editor. Restart TestCpp after editing the file or selecting a resolution. **View → Zoom** changes only the displayed window size, without changing the logical resolution.
 
+The JSON file may be at most 1 MiB. TestCpp accepts at most 128 presets and names up to 80 characters. An oversized file is kept intact, and TestCpp uses built-in presets for that launch.
+
 **View → Save Screenshot…** (Shift-Command-S) saves a PNG of the game view without window chrome. Its pixel dimensions equal the current unscaled resolution, even on Retina or when the window is zoomed. A screenshot of a zoomed-out window is resampled, so fine details may be interpolated.
 
 TestCpp remembers the last selected resolution, zoom level, and ordinary window position. Restarting restores them. If the saved window position is no longer on a connected display, TestCpp moves the title bar into the visible area of the main display. Fullscreen does not replace the saved ordinary window position.
