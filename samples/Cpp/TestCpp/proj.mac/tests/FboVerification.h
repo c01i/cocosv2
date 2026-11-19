@@ -11,6 +11,35 @@ public:
     }
 };
 
+class FboNestedFixture : public cocos2d::CCNode {
+    cocos2d::CCRenderTexture *target_;
+    cocos2d::CCSprite *sprite_;
+public:
+    bool restored;
+    FboNestedFixture() : restored(true) {
+        target_ = cocos2d::CCRenderTexture::create(96, 64);
+        target_->retain();
+        target_->setPosition(ccp(270, 170));
+        sprite_ = cocos2d::CCSprite::create("Images/grossini.png");
+        sprite_->retain();
+        sprite_->setPosition(ccp(24, 16));
+    }
+    virtual ~FboNestedFixture() { target_->release(); sprite_->release(); }
+    virtual void draw() {
+        GLint before, after;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &before);
+        target_->beginWithClear(0.1f, 0.7f, 0.25f, 1.0f);
+        sprite_->visit();
+        target_->end();
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &after);
+        restored = restored && before != 0 && before == after;
+        target_->visit();
+        // This marker must reach the scene framebuffer after the nested pass.
+        cocos2d::ccDrawColor4B(255, 255, 0, 255);
+        cocos2d::ccDrawLine(ccp(240, 230), ccp(300, 230));
+    }
+};
+
 static BOOL verifySceneFramebuffer(EAGLView *view, NSString *directory)
 {
     using namespace cocos2d;
@@ -31,15 +60,9 @@ static BOOL verifySceneFramebuffer(EAGLView *view, NSString *directory)
     CCSprite *sprite = CCSprite::create("Images/grossini.png");
     sprite->setPosition(ccp(360, 140));
     scene->addChild(sprite);
-    // Exercise a nested framebuffer and its restoration to the scene target.
-    CCRenderTexture *nested = CCRenderTexture::create(96, 64);
-    nested->beginWithClear(0.1f, 0.7f, 0.25f, 1.0f);
-    CCSprite *nestedSprite = CCSprite::create("Images/grossini.png");
-    nestedSprite->setPosition(ccp(24, 16));
-    nestedSprite->visit();
-    nested->end();
-    nested->setPosition(ccp(270, 170));
+    FboNestedFixture *nested = new FboNestedFixture();
     scene->addChild(nested);
+    nested->release();
     director->replaceScene(scene);
     director->drawScene();
     [view unlockOpenGLContext];
@@ -61,13 +84,17 @@ static BOOL verifySceneFramebuffer(EAGLView *view, NSString *directory)
         [view setFrameZoomFactor:zooms[i] / 100.0f];
         [view lockOpenGLContext];
         director->drawScene();
+        passed = passed && nested->restored;
         CCEGLView *egl = CCEGLView::sharedOpenGLView();
         egl->setScissorInPoints(10, 20, 30, 40);
         CCRect scissor = egl->getScissorRect();
         passed = passed && fabsf(scissor.origin.x - 10) < 0.01f &&
             fabsf(scissor.origin.y - 20) < 0.01f && fabsf(scissor.size.width - 30) < 0.01f &&
             fabsf(scissor.size.height - 40) < 0.01f;
+        // Inject an unrelated scene error; it must not reject a valid snapshot.
+        glEnable(0xFFFFFFFF);
         NSBitmapImageRep *image = [[view sceneSnapshot] retain];
+        passed = passed && image && glGetError() == GL_NO_ERROR;
         GLint readBefore, drawBefore;
         glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readBefore);
         glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawBefore);
@@ -80,6 +107,16 @@ static BOOL verifySceneFramebuffer(EAGLView *view, NSString *directory)
         passed = passed && ![view setScenePixelSize:NSMakeSize(5000, 640)] && [view usesSceneFramebuffer];
         [view unlockOpenGLContext];
         if (!image || [image pixelsWide] != 960 || [image pixelsHigh] != 640) passed = NO;
+        BOOL markerVisible = NO;
+        if (image) {
+            for (int y = 178; y <= 182; ++y) {
+                for (int x = 480; x < 600; ++x) {
+                    const unsigned char *pixel = [image bitmapData] + y * [image bytesPerRow] + x * 4;
+                    if (pixel[0] > 240 && pixel[1] > 240 && pixel[2] < 15) markerVisible = YES;
+                }
+            }
+        }
+        passed = passed && markerVisible;
         NSData *pixels = image ? [NSData dataWithBytes:[image bitmapData]
             length:[image bytesPerRow] * [image pixelsHigh]] : nil;
         if (i == 0) reference = [pixels retain];

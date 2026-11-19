@@ -308,6 +308,11 @@ static EAGLView *view;
         bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
         colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width * 4 bitsPerPixel:32] autorelease];
     if (!image) return nil;
+    // A test scene may leave an unrelated error pending. Diagnose it without
+    // attributing it to an otherwise successful screenshot readback.
+    GLenum previousError;
+    while ((previousError = glGetError()) != GL_NO_ERROR)
+        NSLog(@"OpenGL error before scene snapshot: 0x%x", previousError);
     GLint oldRead, oldPack;
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldRead);
     glGetIntegerv(GL_PACK_ALIGNMENT, &oldPack);
