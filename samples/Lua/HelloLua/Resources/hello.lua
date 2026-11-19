@@ -206,4 +206,7 @@ local function main()
     CCDirector:sharedDirector():runWithScene(sceneGame)
 end
 
-xpcall(main, __G__TRACKBACK__)
+local ok = xpcall(main, __G__TRACKBACK__)
+if not ok then
+    error("HelloLua scene initialization failed")
+end

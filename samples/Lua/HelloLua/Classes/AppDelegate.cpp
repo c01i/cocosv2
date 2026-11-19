@@ -7,7 +7,7 @@
 USING_NS_CC;
 using namespace CocosDenshion;
 
-AppDelegate::AppDelegate()
+AppDelegate::AppDelegate() : m_sceneReady(false)
 {
     // fixed me
     //_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF|_CRTDBG_LEAK_CHECK_DF);
@@ -44,7 +44,14 @@ bool AppDelegate::applicationDidFinishLaunching()
     CCScriptEngineManager::sharedManager()->setScriptEngine(pEngine);
 
     std::string path = CCFileUtils::sharedFileUtils()->fullPathForFilename("hello.lua");
-    pEngine->executeScriptFile(path.c_str());
+    CCLOG("HelloLua runtime: %s", LUA_RELEASE);
+    if (pEngine->executeScriptFile(path.c_str()) != 0)
+    {
+        CCLOG("HelloLua: failed to execute hello.lua");
+        return false;
+    }
+    CCLOG("HelloLua: Lua scene started");
+    m_sceneReady = true;
 
     return true;
 }

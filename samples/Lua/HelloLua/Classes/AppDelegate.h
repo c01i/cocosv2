@@ -13,6 +13,7 @@ class  AppDelegate : private cocos2d::CCApplication
 public:
     AppDelegate();
     virtual ~AppDelegate();
+    bool isSceneReady() const { return m_sceneReady; }
 
     /**
     @brief    Implement CCDirector and CCScene init code here.
@@ -32,6 +33,9 @@ public:
     @param  the pointer of the application
     */
     virtual void applicationWillEnterForeground();
+
+private:
+    bool m_sceneReady;
 };
 
 #endif // _APP_DELEGATE_H_
