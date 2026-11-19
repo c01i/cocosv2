@@ -30,6 +30,21 @@ On a Retina display, the Mac GL view now converts point-based viewports and scis
 
 Verified locally with Xcode 27.2: the Debug build exited 0 and produced `TestCpp.app`; the app opened to the test list, `ActionsTest` displayed readable text, and `EffectsTest` filled the content area. Returning from `EffectsTest` restored the full-size test list, and `ActionsTest` remained clickable.
 
+## Working directory
+
+Pass `--workdir` before loading resources to use a directory outside the app bundle:
+
+```sh
+/path/to/TestCpp.app/Contents/MacOS/TestCpp --workdir "/path/to/game resources"
+open -n /path/to/TestCpp.app --args --workdir "/absolute/path/to/game resources"
+```
+
+The directory becomes both the process working directory and the Cocos resource root. Relative `setSearchPaths()` entries resolve beneath it, including paths set later by AppDelegate. Supply the resource directory itself, with the same layout as the bundle's Resources directory. Absolute paths, Chinese names, spaces, and `~` are supported. A relative directory is resolved against the process working directory at launch; use an absolute path with `open` because Launch Services chooses that initial directory. Omit the option to retain the existing bundle resource lookup.
+
+A missing or empty value, duplicate `--workdir`, nonexistent directory, ordinary file, or directory that cannot be entered prints an error to stderr and exits with status 2. The option does not relocate resolution preferences or screenshot output. Debug builds can combine it with `--verify-fbo /absolute/output/directory`.
+
+For a focused Debug check, prepare `workdir-root.txt`, `Images/grossini.png` and `external/workdir-nested.txt` beneath a fixture directory, then run `TestCpp --workdir "/path/to/fixture" --verify-workdir`. This checks resolved paths and file bytes, relative search paths set after startup, and preservation of the configured root after failed directory switches. It prints PASS or FAIL and exits before opening the rendering window.
+
 ## Resolution presets and zoom
 
 The **View → Resolution** menu reads `~/Library/Application Support/TestCpp/resolutions.json` at launch. TestCpp creates this file with default presets on the first launch. Add entries to its `resolutions` array, for example:

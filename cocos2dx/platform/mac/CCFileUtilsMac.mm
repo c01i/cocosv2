@@ -218,6 +218,27 @@ CCFileUtils* CCFileUtils::sharedFileUtils()
 
 static NSFileManager* s_fileManager = [NSFileManager defaultManager];
 
+bool CCFileUtilsMac::setWorkingDirectory(const std::string& directory)
+{
+    NSString *path = [NSString stringWithUTF8String:directory.c_str()];
+    if (![path length]) return false;
+    path = [path stringByExpandingTildeInPath];
+    if (![path isAbsolutePath])
+        path = [[s_fileManager currentDirectoryPath] stringByAppendingPathComponent:path];
+    path = [path stringByStandardizingPath];
+    BOOL isDirectory = NO;
+    if (![s_fileManager fileExistsAtPath:path isDirectory:&isDirectory] || !isDirectory ||
+        ![s_fileManager changeCurrentDirectoryPath:path]) return false;
+
+    m_strDefaultResRootPath = [[s_fileManager currentDirectoryPath] UTF8String];
+    if (m_strDefaultResRootPath[m_strDefaultResRootPath.length() - 1] != '/')
+        m_strDefaultResRootPath += '/';
+    // setSearchPaths clears the filename cache and anchors relative paths to the new root.
+    std::vector<std::string> searchPaths = getSearchPaths();
+    setSearchPaths(searchPaths);
+    return true;
+}
+
 std::string CCFileUtilsMac::getWritablePath()
 {
     // save to document folder
@@ -233,6 +254,12 @@ bool CCFileUtilsMac::isFileExist(const std::string& strFilePath)
     if (0 == strFilePath.length())
     {
         return false;
+    }
+
+    if (!m_strDefaultResRootPath.empty() && !isAbsolutePath(strFilePath))
+    {
+        std::string fullPath = m_strDefaultResRootPath + strFilePath;
+        return [s_fileManager fileExistsAtPath:[NSString stringWithUTF8String:fullPath.c_str()]];
     }
     
     bool bRet = false;
@@ -267,18 +294,21 @@ bool CCFileUtilsMac::isFileExist(const std::string& strFilePath)
 
 std::string CCFileUtilsMac::getFullPathForDirectoryAndFilename(const std::string& strDirectory, const std::string& strFilename)
 {
-    if (strDirectory[0] != '/')
+    std::string directory = strDirectory;
+    if (!m_strDefaultResRootPath.empty() && !isAbsolutePath(directory))
+        directory = m_strDefaultResRootPath + directory;
+    if (directory.empty() || directory[0] != '/')
     {
         NSString* fullpath = [[NSBundle mainBundle] pathForResource:[NSString stringWithUTF8String:strFilename.c_str()]
                                                              ofType:nil
-                                                        inDirectory:[NSString stringWithUTF8String:strDirectory.c_str()]];
+                                                        inDirectory:[NSString stringWithUTF8String:directory.c_str()]];
         if (fullpath != nil) {
             return [fullpath UTF8String];
         }
     }
     else
     {
-        std::string fullPath = strDirectory+strFilename;
+        std::string fullPath = directory+strFilename;
         // Search path is an absolute path.
         if ([s_fileManager fileExistsAtPath:[NSString stringWithUTF8String:fullPath.c_str()]]) {
             return fullPath;

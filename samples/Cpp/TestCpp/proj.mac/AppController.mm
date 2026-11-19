@@ -25,6 +25,7 @@
 #import "AppController.h"
 #import "AppDelegate.h"
 #import "CCEGLView.h"
+#include "CCFileUtilsMac.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
@@ -47,6 +48,7 @@ static NSString *screenshotFilename(NSBundle *bundle, NSDate *date)
 
 #if COCOS2D_DEBUG > 0
 #include "tests/FboVerification.h"
+#include "tests/WorkdirVerification.h"
 static NSDictionary *verificationDefaults = nil;
 #endif
 
@@ -78,6 +80,29 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 
 	-(void) applicationDidFinishLaunching:(NSNotification *)aNotification
 	{
+        NSArray *arguments = [[NSProcessInfo processInfo] arguments];
+        NSString *workingDirectory = nil;
+        for (NSUInteger i = 1; i < [arguments count]; ++i) {
+            if (![[arguments objectAtIndex:i] isEqualToString:@"--workdir"]) continue;
+            if (workingDirectory || i + 1 >= [arguments count] ||
+                ![[arguments objectAtIndex:i + 1] length] ||
+                [[arguments objectAtIndex:i + 1] hasPrefix:@"--"]) {
+                fprintf(stderr, "TestCpp: --workdir requires exactly one directory and may appear only once.\n");
+                exit(2);
+            }
+            workingDirectory = [arguments objectAtIndex:++i];
+        }
+        if (workingDirectory) {
+            cocos2d::CCFileUtilsMac *files = static_cast<cocos2d::CCFileUtilsMac *>(cocos2d::CCFileUtils::sharedFileUtils());
+            if (!files->setWorkingDirectory([workingDirectory UTF8String])) {
+                fprintf(stderr, "TestCpp: unable to use --workdir directory: %s\n", [workingDirectory UTF8String]);
+                exit(2);
+            }
+        }
+#if COCOS2D_DEBUG > 0
+        if ([arguments containsObject:@"--verify-workdir"])
+            exit(verifyWorkingDirectory() ? 0 : 1);
+#endif
 		resolutionPresets = [[self loadResolutionPresets] retain];
 		NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 		selectedWidth = [defaults integerForKey:kResolutionWidthKey];
@@ -102,7 +127,6 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 		}
 
 		#if COCOS2D_DEBUG > 0
-        NSArray *arguments = [[NSProcessInfo processInfo] arguments];
         NSUInteger verifyIndex = [arguments indexOfObject:@"--verify-fbo"];
         BOOL verify = verifyIndex != NSNotFound && verifyIndex + 1 < [arguments count];
         if (verify) {

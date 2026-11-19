@@ -24,10 +24,10 @@
 #ifndef __CC_FILEUTILSMAC_H__
 #define __CC_FILEUTILSMAC_H__
 
-#include "CCFileUtils.h"
+#include "platform/CCFileUtils.h"
 #include <string>
 #include <vector>
-#include "CCPlatformMacros.h"
+#include "platform/CCPlatformMacros.h"
 #include "ccTypes.h"
 #include "ccTypeInfo.h"
 
@@ -41,6 +41,10 @@ NS_CC_BEGIN
 class CC_DLL CCFileUtilsMac : public CCFileUtils
 {
 public:
+    // Call before loading resources. Relative search paths use this directory as their root.
+    // Returns false without changing the resource root if the directory cannot be entered.
+    bool setWorkingDirectory(const std::string& directory);
+
     /* override funtions */
     virtual std::string getWritablePath();
     virtual bool isFileExist(const std::string& strFilePath);
