@@ -143,6 +143,8 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 			styleMask:( NSClosableWindowMask | NSTitledWindowMask )
 			backing:NSBackingStoreBuffered
 			defer:YES];
+        // Keep the controller-owned window alive through applicationWillTerminate.
+        [window setReleasedWhenClosed:NO];
         
         NSOpenGLPixelFormatAttribute attributes[] = {
             NSOpenGLPFADoubleBuffer,
@@ -421,7 +423,11 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 
 	-(void) dealloc
 	{
+		cocos2d::CCDirector::sharedDirector()->stopAnimation();
 		cocos2d::CCDirector::sharedDirector()->end();
+        [window setDelegate:nil];
+        [window release];
+        [glView release];
 		[resolutionPresets release];
 		[super dealloc];
 	}
