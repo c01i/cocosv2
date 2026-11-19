@@ -139,25 +139,16 @@ static EAGLView *view;
 
 - (void) setFrameZoomFactor:(float)frameZoomFactor
 {
+    if (frameZoomFactor <= 0 || ![self window]) return;
+
+    // The view is already scaled; derive its unscaled content size before resizing.
+    NSSize logicalSize = NSMakeSize([self bounds].size.width / frameZoomFactor_,
+                                   [self bounds].size.height / frameZoomFactor_);
+    NSPoint topLeft = NSMakePoint(NSMinX([[self window] frame]), NSMaxY([[self window] frame]));
     frameZoomFactor_ = frameZoomFactor;
-    
-    NSRect winRect = [[self window] frame];
-    NSRect viewRect = [self frame];
-    
-    // compute the margin width and margin height
-    float diffX = winRect.size.width - viewRect.size.width;
-    float diffY = winRect.size.height - viewRect.size.height;
-    
-    // new window width and height
-    float newWindowWidth = (int)(viewRect.size.width * frameZoomFactor + diffX);
-    float newWindowHeight = (int)(viewRect.size.height * frameZoomFactor + diffY);
-    
-    // display window in the center of the screen
-    NSRect screenRect = [[NSScreen mainScreen] frame];
-    float originX = (screenRect.size.width - newWindowWidth) / 2;
-    float originY = (screenRect.size.height - newWindowHeight) / 2;
-    
-    [[self window] setFrame:NSMakeRect(originX, originY, newWindowWidth, newWindowHeight) display:true];
+    [[self window] setContentSize:NSMakeSize(roundf(logicalSize.width * frameZoomFactor),
+                                            roundf(logicalSize.height * frameZoomFactor))];
+    [[self window] setFrameTopLeftPoint:topLeft];
 }
 
 - (void) reshape

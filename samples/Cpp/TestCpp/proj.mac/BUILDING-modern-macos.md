@@ -29,3 +29,13 @@ The Mac audio shim no longer declares SDK audio constants or calls the unavailab
 On a Retina display, the Mac GL view now converts point-based viewports and scissor rectangles to backing pixels. The grid effects still render to their point-sized textures. This keeps `EffectsTest` and the scene after returning to the test list at the full window size.
 
 Verified locally with Xcode 27.2: the Debug build exited 0 and produced `TestCpp.app`; the app opened to the test list, `ActionsTest` displayed readable text, and `EffectsTest` filled the content area. Returning from `EffectsTest` restored the full-size test list, and `ActionsTest` remained clickable.
+
+## Resolution presets and zoom
+
+The **View → Resolution** menu reads `~/Library/Application Support/TestCpp/resolutions.json` at launch. TestCpp creates this file with default presets on the first launch. Add entries to its `resolutions` array, for example:
+
+```json
+{"resolutions": [{"name": "Portrait 720 × 1280", "width": 720, "height": 1280}]}
+```
+
+`width` and `height` are unscaled logical pixels. They must be integers from 320 through 4096, with at most 16,777,216 total pixels. Names must be nonempty; duplicate sizes are ignored. A malformed file is kept intact and TestCpp uses built-in presets for that launch. The menu includes **Open Resolution Config…** to open the file in the default editor. Restart TestCpp after editing the file or selecting a resolution. **View → Zoom** changes only the displayed window size, without changing the logical resolution.

@@ -31,6 +31,12 @@
 	{
 		NSWindow *window;
 		EAGLView *glView;
+		NSArray *resolutionPresets;
+		NSMenu *resolutionMenu;
+		NSMenu *zoomMenu;
+		NSInteger selectedWidth;
+		NSInteger selectedHeight;
+		float selectedZoom;
 	}
 
 	@property (nonatomic, assign) IBOutlet NSWindow* window;
@@ -38,5 +44,8 @@
 
 	-(IBAction) toggleFullScreen:(id)sender;
 	-(IBAction) exitFullScreen:(id)sender;
+	-(IBAction) selectResolution:(id)sender;
+	-(IBAction) selectZoom:(id)sender;
+	-(IBAction) openResolutionConfig:(id)sender;
 
 @end

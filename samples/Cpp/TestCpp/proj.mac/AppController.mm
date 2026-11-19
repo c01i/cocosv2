@@ -25,6 +25,16 @@
 #import "AppController.h"
 #import "AppDelegate.h"
 
+static NSString *const kResolutionWidthKey = @"TestCppResolutionWidth";
+static NSString *const kResolutionHeightKey = @"TestCppResolutionHeight";
+
+@interface AppController ()
+- (NSString *)resolutionConfigPath;
+- (NSArray *)loadResolutionPresets;
+- (void)setupViewMenu;
+- (void)updateViewMenu;
+@end
+
 @implementation AppController
 
 	static AppDelegate s_sharedApplication;
@@ -33,10 +43,28 @@
 
 	-(void) applicationDidFinishLaunching:(NSNotification *)aNotification
 	{
+		resolutionPresets = [[self loadResolutionPresets] retain];
+		NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+		selectedWidth = [defaults integerForKey:kResolutionWidthKey];
+		selectedHeight = [defaults integerForKey:kResolutionHeightKey];
+		BOOL validSelection = NO;
+		for (NSDictionary *preset in resolutionPresets) {
+			if ([[preset objectForKey:@"width"] integerValue] == selectedWidth &&
+				[[preset objectForKey:@"height"] integerValue] == selectedHeight) {
+				validSelection = YES;
+				break;
+			}
+		}
+		if (!validSelection) {
+			selectedWidth = 480;
+			selectedHeight = 320;
+		}
+		selectedZoom = 1.0f;
+
 		// create the window
 		// note that using NSResizableWindowMask causes the window to be a little
 		// smaller and therefore ipad graphics are not loaded
-        NSRect rect = NSMakeRect(200, 200, 480, 320);
+		NSRect rect = NSMakeRect(200, 200, selectedWidth, selectedHeight);
 		window = [[NSWindow alloc] initWithContentRect:rect
 			styleMask:( NSClosableWindowMask | NSTitledWindowMask )
 			backing:NSBackingStoreBuffered
@@ -53,7 +81,8 @@
 		
 		// allocate our GL view
 		// (isn't there already a shared EAGLView?)
-		glView = [[EAGLView alloc] initWithFrame:rect pixelFormat:pixelFormat];
+		glView = [[EAGLView alloc] initWithFrame:NSMakeRect(0, 0, selectedWidth, selectedHeight)
+			pixelFormat:pixelFormat];
 
 		// set window parameters
 		[window becomeFirstResponder];
@@ -62,8 +91,133 @@
 		[window makeKeyAndOrderFront:self];
 		[window setAcceptsMouseMovedEvents:NO];
 		[[glView openGLContext] makeCurrentContext];
+		[self setupViewMenu];
 
 		cocos2d::CCApplication::sharedApplication()->run();
+	}
+
+	- (NSString *)resolutionConfigPath
+	{
+		NSString *support = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory,
+			NSUserDomainMask, YES) objectAtIndex:0];
+		return [[support stringByAppendingPathComponent:@"TestCpp"]
+			stringByAppendingPathComponent:@"resolutions.json"];
+	}
+
+	- (NSArray *)loadResolutionPresets
+	{
+		NSArray *fallback = [NSArray arrayWithObjects:
+			[NSDictionary dictionaryWithObjectsAndKeys:@"480 × 320", @"name", @480, @"width", @320, @"height", nil],
+			[NSDictionary dictionaryWithObjectsAndKeys:@"960 × 640", @"name", @960, @"width", @640, @"height", nil],
+			[NSDictionary dictionaryWithObjectsAndKeys:@"640 × 480", @"name", @640, @"width", @480, @"height", nil], nil];
+		NSString *path = [self resolutionConfigPath];
+		NSFileManager *files = [NSFileManager defaultManager];
+		if (![files fileExistsAtPath:path]) {
+			NSError *error = nil;
+			NSString *directory = [path stringByDeletingLastPathComponent];
+			[files createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:&error];
+			if (!error) {
+				NSDictionary *document = [NSDictionary dictionaryWithObject:fallback forKey:@"resolutions"];
+				NSData *json = [NSJSONSerialization dataWithJSONObject:document
+					options:NSJSONWritingPrettyPrinted error:&error];
+				if (json && ![json writeToFile:path options:NSDataWritingAtomic error:&error]) {
+					NSLog(@"Unable to write %@: %@", path, error);
+				}
+			} else {
+				NSLog(@"Unable to create %@: %@", directory, error);
+			}
+		}
+
+		NSData *data = [NSData dataWithContentsOfFile:path];
+		if (!data) return fallback;
+		NSError *error = nil;
+		id document = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
+		if (![document isKindOfClass:[NSDictionary class]] ||
+			![[document objectForKey:@"resolutions"] isKindOfClass:[NSArray class]]) {
+			NSLog(@"Invalid resolution config %@: %@", path, error);
+			return fallback;
+		}
+
+		NSMutableArray *presets = [NSMutableArray array];
+		NSMutableSet *seen = [NSMutableSet set];
+		for (id entry in [document objectForKey:@"resolutions"]) {
+			if (![entry isKindOfClass:[NSDictionary class]]) continue;
+			id name = [entry objectForKey:@"name"];
+			id width = [entry objectForKey:@"width"];
+			id height = [entry objectForKey:@"height"];
+			if (![name isKindOfClass:[NSString class]] ||
+				![[name stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] length] ||
+				![width isKindOfClass:[NSNumber class]] || ![height isKindOfClass:[NSNumber class]]) continue;
+			double w = [width doubleValue], h = [height doubleValue];
+			if (!isfinite(w) || !isfinite(h) || floor(w) != w || floor(h) != h ||
+				w < 320 || h < 320 || w > 4096 || h > 4096 || w * h > 16777216) continue;
+			NSString *key = [NSString stringWithFormat:@"%d:%d", (int)w, (int)h];
+			if ([seen containsObject:key]) continue;
+			[seen addObject:key];
+			[presets addObject:[NSDictionary dictionaryWithObjectsAndKeys:name, @"name",
+				[NSNumber numberWithInt:(int)w], @"width", [NSNumber numberWithInt:(int)h], @"height", nil]];
+		}
+		if (![presets count]) {
+			NSLog(@"No valid resolutions in %@; using defaults", path);
+			return fallback;
+		}
+		if (![seen containsObject:@"480:320"]) {
+			[presets insertObject:[fallback objectAtIndex:0] atIndex:0];
+		}
+		return presets;
+	}
+
+	- (void)setupViewMenu
+	{
+		NSMenu *viewMenu = [[[NSApp mainMenu] itemWithTitle:@"View"] submenu];
+		if (!viewMenu) return;
+		resolutionMenu = [[[NSMenu alloc] initWithTitle:@"Resolution"] autorelease];
+		NSMenuItem *resolutionItem = [[[NSMenuItem alloc] initWithTitle:@"Resolution"
+			action:nil keyEquivalent:@""] autorelease];
+		[resolutionItem setSubmenu:resolutionMenu];
+		[viewMenu addItem:resolutionItem];
+		NSInteger index = 0;
+		for (NSDictionary *preset in resolutionPresets) {
+			NSMenuItem *item = [[[NSMenuItem alloc] initWithTitle:[preset objectForKey:@"name"]
+				action:@selector(selectResolution:) keyEquivalent:@""] autorelease];
+			[item setTarget:self];
+			[item setTag:index++];
+			[resolutionMenu addItem:item];
+		}
+		[resolutionMenu addItem:[NSMenuItem separatorItem]];
+		NSMenuItem *openItem = [[[NSMenuItem alloc] initWithTitle:@"Open Resolution Config…"
+			action:@selector(openResolutionConfig:) keyEquivalent:@""] autorelease];
+		[openItem setTarget:self];
+		[resolutionMenu addItem:openItem];
+
+		zoomMenu = [[[NSMenu alloc] initWithTitle:@"Zoom"] autorelease];
+		NSMenuItem *zoomItem = [[[NSMenuItem alloc] initWithTitle:@"Zoom"
+			action:nil keyEquivalent:@""] autorelease];
+		[zoomItem setSubmenu:zoomMenu];
+		[viewMenu addItem:zoomItem];
+		int scales[] = {25, 50, 75, 100, 150, 200};
+		for (int i = 0; i < 6; ++i) {
+			NSMenuItem *item = [[[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"%d%%", scales[i]]
+				action:@selector(selectZoom:) keyEquivalent:@""] autorelease];
+			[item setTarget:self];
+			[item setTag:scales[i]];
+			[zoomMenu addItem:item];
+		}
+		[self updateViewMenu];
+	}
+
+	- (void)updateViewMenu
+	{
+		for (NSMenuItem *item in [resolutionMenu itemArray]) {
+			NSInteger index = [item tag];
+			if ([item action] != @selector(selectResolution:) || index >= [resolutionPresets count]) continue;
+			NSDictionary *preset = [resolutionPresets objectAtIndex:index];
+			[item setState:([[preset objectForKey:@"width"] integerValue] == selectedWidth &&
+				[[preset objectForKey:@"height"] integerValue] == selectedHeight) ? NSOnState : NSOffState];
+		}
+		for (NSMenuItem *item in [zoomMenu itemArray]) {
+			[item setState:([item tag] == (NSInteger)roundf(selectedZoom * 100)) ? NSOnState : NSOffState];
+		}
 	}
 
 	-(BOOL) applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)theApplication
@@ -74,6 +228,7 @@
 	-(void) dealloc
 	{
 		cocos2d::CCDirector::sharedDirector()->end();
+		[resolutionPresets release];
 		[super dealloc];
 	}
 
@@ -89,6 +244,42 @@
 	-(IBAction) exitFullScreen:(id)sender
 	{
 		[[EAGLView sharedEGLView] setFullScreen:NO];
+	}
+
+	-(IBAction)selectResolution:(id)sender
+	{
+		NSInteger index = [sender tag];
+		if (index < 0 || index >= [resolutionPresets count]) return;
+		NSDictionary *preset = [resolutionPresets objectAtIndex:index];
+		NSInteger width = [[preset objectForKey:@"width"] integerValue];
+		NSInteger height = [[preset objectForKey:@"height"] integerValue];
+		if (width == selectedWidth && height == selectedHeight) return;
+		selectedWidth = width;
+		selectedHeight = height;
+		NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+		[defaults setInteger:width forKey:kResolutionWidthKey];
+		[defaults setInteger:height forKey:kResolutionHeightKey];
+		[defaults synchronize];
+		[self updateViewMenu];
+		NSAlert *alert = [[[NSAlert alloc] init] autorelease];
+		[alert setMessageText:@"Restart TestCpp to apply the selected resolution."];
+		[alert runModal];
+	}
+
+	-(IBAction)selectZoom:(id)sender
+	{
+		selectedZoom = [sender tag] / 100.0f;
+		[glView setFrameZoomFactor:selectedZoom];
+		[self updateViewMenu];
+	}
+
+	-(IBAction)openResolutionConfig:(id)sender
+	{
+		if (![[NSWorkspace sharedWorkspace] openFile:[self resolutionConfigPath]]) {
+			NSAlert *alert = [[[NSAlert alloc] init] autorelease];
+			[alert setMessageText:@"Unable to open resolutions.json"];
+			[alert runModal];
+		}
 	}
 
 @end
