@@ -44,6 +44,8 @@ The JSON file may be at most 1 MiB. TestCpp accepts at most 128 presets and name
 
 **View → Save Screenshot…** (Shift-Command-S) saves a PNG of the game view without window chrome. Its pixel dimensions equal the current unscaled resolution, even on Retina or when the window is zoomed. TestCpp renders the scene into a fixed-resolution RGBA8 framebuffer with depth/stencil attachments. Only presentation to the window is scaled; screenshots read the original framebuffer directly, without resampling. At 960×640, 25% zoom still captures all 960×640 rendered pixels. This keeps rendering cost tied to the selected resolution, even in a small window.
 
+The save panel suggests `{application-name}-ss-yyyyMMddHHmmss-SSS.png`, for example `TestCpp-ss-20261119173542-083.png`. The name uses the bundle display name (or bundle name), local time when the panel opens, and three-digit milliseconds. You can edit it before saving.
+
 TestCpp remembers the last selected resolution, zoom level, and ordinary window position. Restarting restores them. If the saved window position is no longer on a connected display, TestCpp moves the title bar into the visible area of the main display. Fullscreen does not replace the saved ordinary window position.
 
 ### Screenshot detail regression check (Debug)

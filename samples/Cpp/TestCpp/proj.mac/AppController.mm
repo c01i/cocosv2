@@ -31,6 +31,20 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+static NSString *screenshotFilename(NSBundle *bundle, NSDate *date)
+{
+    NSString *applicationName = [bundle objectForInfoDictionaryKey:@"CFBundleDisplayName"];
+    if (![applicationName length]) applicationName = [bundle objectForInfoDictionaryKey:@"CFBundleName"];
+    if (![applicationName length]) applicationName = [[NSProcessInfo processInfo] processName];
+
+    NSDateFormatter *formatter = [[[NSDateFormatter alloc] init] autorelease];
+    [formatter setLocale:[[[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"] autorelease]];
+    [formatter setCalendar:[[[NSCalendar alloc] initWithCalendarIdentifier:NSCalendarIdentifierGregorian] autorelease]];
+    [formatter setTimeZone:[NSTimeZone localTimeZone]];
+    [formatter setDateFormat:@"yyyyMMddHHmmss-SSS"];
+    return [NSString stringWithFormat:@"%@-ss-%@.png", applicationName, [formatter stringFromDate:date]];
+}
+
 #if COCOS2D_DEBUG > 0
 #include "tests/FboVerification.h"
 static NSDictionary *verificationDefaults = nil;
@@ -444,7 +458,7 @@ static NSString *const kWindowOriginYKey = @"TestCppWindowOriginY";
 	-(IBAction)saveScreenshot:(id)sender
 	{
 		NSSavePanel *panel = [NSSavePanel savePanel];
-		[panel setNameFieldStringValue:@"TestCpp.png"];
+		[panel setNameFieldStringValue:screenshotFilename([NSBundle mainBundle], [NSDate date])];
 		[panel setAllowedFileTypes:[NSArray arrayWithObject:@"png"]];
 		if ([panel runModal] != NSFileHandlingPanelOKButton) return;
 
