@@ -30,6 +30,14 @@
 
 NS_CC_BEGIN
 
+static NSSize backingScale(EAGLView *view)
+{
+    NSRect bounds = [view bounds];
+    NSRect backingBounds = [view convertRectToBacking:bounds];
+    return NSMakeSize(bounds.size.width ? backingBounds.size.width / bounds.size.width : 1.0f,
+                      bounds.size.height ? backingBounds.size.height / bounds.size.height : 1.0f);
+}
+
 CCEGLView* CCEGLView::s_sharedView = NULL;
 
 CCEGLView* CCEGLView::sharedOpenGLView(void)
@@ -92,31 +100,41 @@ void CCEGLView::setViewPortInPoints(float x , float y , float w , float h)
 {
     EAGLView *view = [EAGLView sharedEGLView];
     float frameZoomFactor = [view frameZoomFactor];
-    NSRect bounds = [view bounds];
-    NSRect backingBounds = [view convertRectToBacking:bounds];
-    float backingScaleX = bounds.size.width ? backingBounds.size.width / bounds.size.width : 1.0f;
-    float backingScaleY = bounds.size.height ? backingBounds.size.height / bounds.size.height : 1.0f;
+    NSSize scale = backingScale(view);
 
     // OpenGL viewports use backing pixels, while the director uses window points.
-    glViewport((GLint)((x * m_fScaleX + m_obViewPortRect.origin.x) * frameZoomFactor * backingScaleX),
-               (GLint)((y * m_fScaleY + m_obViewPortRect.origin.y) * frameZoomFactor * backingScaleY),
-               (GLsizei)(w * m_fScaleX * frameZoomFactor * backingScaleX),
-               (GLsizei)(h * m_fScaleY * frameZoomFactor * backingScaleY));
+    glViewport((GLint)((x * m_fScaleX + m_obViewPortRect.origin.x) * frameZoomFactor * scale.width),
+               (GLint)((y * m_fScaleY + m_obViewPortRect.origin.y) * frameZoomFactor * scale.height),
+               (GLsizei)(w * m_fScaleX * frameZoomFactor * scale.width),
+               (GLsizei)(h * m_fScaleY * frameZoomFactor * scale.height));
 }
 
 void CCEGLView::setScissorInPoints(float x , float y , float w , float h)
 {
     EAGLView *view = [EAGLView sharedEGLView];
     float frameZoomFactor = [view frameZoomFactor];
-    NSRect bounds = [view bounds];
-    NSRect backingBounds = [view convertRectToBacking:bounds];
-    float backingScaleX = bounds.size.width ? backingBounds.size.width / bounds.size.width : 1.0f;
-    float backingScaleY = bounds.size.height ? backingBounds.size.height / bounds.size.height : 1.0f;
+    NSSize scale = backingScale(view);
 
-    glScissor((GLint)((x * m_fScaleX + m_obViewPortRect.origin.x) * frameZoomFactor * backingScaleX),
-              (GLint)((y * m_fScaleY + m_obViewPortRect.origin.y) * frameZoomFactor * backingScaleY),
-              (GLsizei)(w * m_fScaleX * frameZoomFactor * backingScaleX),
-              (GLsizei)(h * m_fScaleY * frameZoomFactor * backingScaleY));
+    glScissor((GLint)((x * m_fScaleX + m_obViewPortRect.origin.x) * frameZoomFactor * scale.width),
+              (GLint)((y * m_fScaleY + m_obViewPortRect.origin.y) * frameZoomFactor * scale.height),
+              (GLsizei)(w * m_fScaleX * frameZoomFactor * scale.width),
+              (GLsizei)(h * m_fScaleY * frameZoomFactor * scale.height));
+}
+
+CCRect CCEGLView::getScissorRect()
+{
+    EAGLView *view = [EAGLView sharedEGLView];
+    float frameZoomFactor = [view frameZoomFactor];
+    NSSize scale = backingScale(view);
+    GLint box[4];
+    glGetIntegerv(GL_SCISSOR_BOX, box);
+
+    float scaleX = m_fScaleX * frameZoomFactor * scale.width;
+    float scaleY = m_fScaleY * frameZoomFactor * scale.height;
+    return CCRectMake((box[0] / (frameZoomFactor * scale.width) - m_obViewPortRect.origin.x) / m_fScaleX,
+                      (box[1] / (frameZoomFactor * scale.height) - m_obViewPortRect.origin.y) / m_fScaleY,
+                      box[2] / scaleX,
+                      box[3] / scaleY);
 }
 
 void CCEGLView::setMultiTouchMask(bool mask)
