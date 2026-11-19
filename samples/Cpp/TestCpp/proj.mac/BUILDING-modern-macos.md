@@ -18,10 +18,14 @@ Run the following from the repository root:
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
   -project samples/Cpp/TestCpp/proj.mac/TestCpp.xcodeproj \
   -scheme TestCpp -configuration Debug -destination 'generic/platform=macOS' \
-  -derivedDataPath /tmp/cocosv2-testcpp-derived \
+  -derivedDataPath /private/tmp/cocosv2-testcpp-task-derived \
   CODE_SIGNING_ALLOWED=NO ARCHS=x86_64 ONLY_ACTIVE_ARCH=NO \
-  MACOSX_DEPLOYMENT_TARGET=12.0 CLANG_CXX_LIBRARY=libc++ build
-open /tmp/cocosv2-testcpp-derived/Build/Products/Debug/TestCpp.app
+  MACOSX_DEPLOYMENT_TARGET=12.0 CLANG_CXX_LIBRARY=libc++ -quiet build
+open /private/tmp/cocosv2-testcpp-task-derived/Build/Products/Debug/TestCpp.app
 ```
 
 The Mac audio shim no longer declares SDK audio constants or calls the unavailable AudioSession API. Its status queries return `NO`. Font labels draw into a fixed RGBA8 buffer before OpenGL upload because a focused-view bitmap's pixel layout can vary on modern macOS. The TestCpp launcher makes its OpenGL context current before Cocos gathers GPU details.
+
+On a Retina display, the Mac GL view now converts point-based viewports and scissor rectangles to backing pixels. The grid effects still render to their point-sized textures. This keeps `EffectsTest` and the scene after returning to the test list at the full window size.
+
+Verified locally with Xcode 27.2: the Debug build exited 0 and produced `TestCpp.app`; the app opened to the test list, `ActionsTest` displayed readable text, and `EffectsTest` filled the content area. Returning from `EffectsTest` restored the full-size test list, and `ActionsTest` remained clickable.
